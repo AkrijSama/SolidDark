@@ -1,0 +1,52 @@
+{
+  "name": "rashomon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The security gate that protects you from your own AI agents.",
+  "main": "dist/src/main/index.js",
+  "type": "module",
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "build": "pnpm run build:main && pnpm run build:renderer",
+    "build:main": "tsc -p tsconfig.json",
+    "build:renderer": "vite build --config vite.config.ts",
+    "dev:renderer": "vite --config vite.config.ts",
+    "start": "electron dist/src/main/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "crypto-js": "^4.2.0",
+    "drizzle-orm": "^0.44.7",
+    "electron": "^33.3.1",
+    "http-proxy": "^1.18.1",
+    "js-yaml": "^4.1.0",
+    "lucide-react": "^0.575.0",
+    "node-forge": "^1.3.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.3.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/vite": "^4.1.13",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/http-proxy": "^1.17.16",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.19.17",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "drizzle-kit": "^0.31.5",
+    "electron-builder": "^26.0.12",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "^4.0.18"
+  }
+}
