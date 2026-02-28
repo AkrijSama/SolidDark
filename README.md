@@ -93,6 +93,8 @@ soliddark export vendor-packet --passport <file> --continuity <dir> [--out <dir|
 - [docs/PRIVACY.md](/home/akrij/SolidDark/soliddark/docs/PRIVACY.md)
 - [docs/THREAT_MODEL.md](/home/akrij/SolidDark/soliddark/docs/THREAT_MODEL.md)
 - [docs/PUBLIC_PRIVATE_AUDIT.md](/home/akrij/SolidDark/soliddark/docs/PUBLIC_PRIVATE_AUDIT.md)
+- [docs/PRIVATE_MODULES.md](/home/akrij/SolidDark/soliddark/docs/PRIVATE_MODULES.md)
+- [docs/PRIVATE_PUBLISHING.md](/home/akrij/SolidDark/soliddark/docs/PRIVATE_PUBLISHING.md)
 
 ## Private extension points
 

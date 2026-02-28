@@ -15,6 +15,8 @@ jobs:
       SOLIDDARK_OUT: .soliddark/ci
       SOLIDDARK_REGISTRY_URL: ${{ secrets.SOLIDDARK_REGISTRY_URL }}
       SOLIDDARK_REGISTRY_API_KEY: ${{ secrets.SOLIDDARK_REGISTRY_API_KEY }}
+      SOLIDDARK_PRIVATE_MODULES: ${{ secrets.SOLIDDARK_PRIVATE_MODULES }}
+      SOLIDDARK_PRIVATE_PACKAGES_TOKEN: ${{ secrets.SOLIDDARK_PRIVATE_PACKAGES_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,6 +34,22 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Configure GitHub Packages auth for private modules
+        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' && env.SOLIDDARK_PRIVATE_PACKAGES_TOKEN != '' }}
+        run: |
+          cat <<'EOF' >> ~/.npmrc
+          @soliddark:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=${SOLIDDARK_PRIVATE_PACKAGES_TOKEN}
+          always-auth=true
+          EOF
+
+      - name: Install private modules
+        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' && env.SOLIDDARK_PRIVATE_PACKAGES_TOKEN != '' }}
+        run: |
+          pnpm add --no-save @soliddark/private-core @soliddark/private-registry
+          echo "SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE=$PWD/node_modules/@soliddark/private-core/dist/index.js" >> "$GITHUB_ENV"
+          echo "SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE=$PWD/node_modules/@soliddark/private-registry/dist/index.js" >> "$GITHUB_ENV"
 
       - name: Build packages
         run: pnpm build:packages

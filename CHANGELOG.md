@@ -9,6 +9,8 @@ Privatization-ready follow-up release.
 - private core hook loader for premium enrichment and risk overlays
 - private registry policy loader for premium issuance control
 - documentation for private module contracts and deployment
+- GitHub Actions injection path for private modules via GitHub Packages
+- private package publishing guide for separate private repos
 - local private package skeletons outside the public repo for `@soliddark/private-core` and `@soliddark/private-registry`
 
 ### Changed
