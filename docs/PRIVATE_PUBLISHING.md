@@ -100,7 +100,7 @@ jobs:
 The public repo’s [`soliddark.yml`](../.github/workflows/soliddark.yml) now supports private-module injection when these secrets are set:
 
 - `SOLIDDARK_PRIVATE_MODULES=true`
-- optional `SOLIDDARK_PRIVATE_PACKAGES_TOKEN=<token with read:packages>`
+- `SOLIDDARK_PRIVATE_PACKAGES_TOKEN=<token with read:packages>`
 
 When enabled, CI:
 
@@ -110,7 +110,7 @@ When enabled, CI:
   - `SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE`
   - `SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE`
 
-If `SOLIDDARK_PRIVATE_PACKAGES_TOKEN` is absent, the workflow falls back to `github.token`. That may still require package access to be granted to the public repository in GitHub’s package settings.
+If `SOLIDDARK_PRIVATE_PACKAGES_TOKEN` is absent, the workflow now skips private-module injection explicitly and records `UNKNOWN` with the reason in `ci-runtime.json`. It does not silently downgrade and it does not hard-fail the baseline artifact path.
 
 ## Local development
 

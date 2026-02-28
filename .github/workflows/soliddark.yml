@@ -36,20 +36,38 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Configure GitHub Packages auth for private modules
-        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Decide premium module injection
         run: |
-          TOKEN="${SOLIDDARK_PRIVATE_PACKAGES_TOKEN:-$GITHUB_TOKEN}"
+          mkdir -p "$SOLIDDARK_OUT"
+          if [ "${SOLIDDARK_PRIVATE_MODULES}" != "true" ]; then
+            echo "SOLIDDARK_PRIVATE_MODULES_READY=false" >> "$GITHUB_ENV"
+            echo "SOLIDDARK_PRIVATE_MODULES_STATUS=unknown" >> "$GITHUB_ENV"
+            echo "SOLIDDARK_PRIVATE_MODULES_REASON=Private module injection was not requested." >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [ -z "${SOLIDDARK_PRIVATE_PACKAGES_TOKEN}" ]; then
+            echo "SOLIDDARK_PRIVATE_MODULES_READY=false" >> "$GITHUB_ENV"
+            echo "SOLIDDARK_PRIVATE_MODULES_STATUS=unknown" >> "$GITHUB_ENV"
+            echo "SOLIDDARK_PRIVATE_MODULES_REASON=SOLIDDARK_PRIVATE_PACKAGES_TOKEN is not configured for GitHub Packages read access." >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          echo "SOLIDDARK_PRIVATE_MODULES_READY=true" >> "$GITHUB_ENV"
+          echo "SOLIDDARK_PRIVATE_MODULES_STATUS=ok" >> "$GITHUB_ENV"
+          echo "SOLIDDARK_PRIVATE_MODULES_REASON=Private module injection is enabled with an explicit package token." >> "$GITHUB_ENV"
+
+      - name: Configure GitHub Packages auth for private modules
+        if: ${{ env.SOLIDDARK_PRIVATE_MODULES_READY == 'true' }}
+        run: |
           cat <<EOF >> ~/.npmrc
           @akrijsama:registry=https://npm.pkg.github.com
-          //npm.pkg.github.com/:_authToken=${TOKEN}
+          //npm.pkg.github.com/:_authToken=${SOLIDDARK_PRIVATE_PACKAGES_TOKEN}
           always-auth=true
           EOF
 
       - name: Install private modules
-        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' }}
+        if: ${{ env.SOLIDDARK_PRIVATE_MODULES_READY == 'true' }}
         run: |
           pnpm add -Dw @akrijsama/private-core @akrijsama/private-registry
           echo "SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE=$PWD/node_modules/@akrijsama/private-core/dist/index.js" >> "$GITHUB_ENV"
@@ -85,6 +103,47 @@ jobs:
         if: ${{ env.SOLIDDARK_REGISTRY_API_KEY != '' && env.SOLIDDARK_REGISTRY_URL != '' }}
         run: pnpm --filter @soliddark/cli exec soliddark publish "$SOLIDDARK_OUT/risk-passport.json" --bench-opt-in
 
+      - name: Record CI runtime status
+        if: ${{ always() }}
+        run: |
+          mkdir -p "$SOLIDDARK_OUT"
+          node - <<'EOF'
+          const { writeFileSync } = require("node:fs");
+
+          const privateModules = {
+            status: process.env.SOLIDDARK_PRIVATE_MODULES_STATUS || "unknown",
+            reason: process.env.SOLIDDARK_PRIVATE_MODULES_REASON || "UNKNOWN",
+            requested: process.env.SOLIDDARK_PRIVATE_MODULES === "true",
+            injected: process.env.SOLIDDARK_PRIVATE_MODULES_READY === "true",
+          };
+
+          const registryPublish =
+            process.env.SOLIDDARK_REGISTRY_API_KEY && process.env.SOLIDDARK_REGISTRY_URL
+              ? {
+                  status: "ok",
+                  reason: "Registry publish path was configured.",
+                }
+              : {
+                  status: "unknown",
+                  reason: "Registry publish was skipped because SOLIDDARK_REGISTRY_API_KEY or SOLIDDARK_REGISTRY_URL is missing.",
+                };
+
+          const payload = {
+            status: "ok",
+            generated_at: new Date().toISOString(),
+            disclaimers: [
+              "Not legal advice. For information purposes only.",
+              "No guarantee of security. This report may be incomplete.",
+            ],
+            checks: {
+              private_modules: privateModules,
+              registry_publish: registryPublish,
+            },
+          };
+
+          writeFileSync(`${process.env.SOLIDDARK_OUT}/ci-runtime.json`, `${JSON.stringify(payload, null, 2)}\n`);
+          EOF
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -94,6 +153,7 @@ jobs:
             ${{ env.SOLIDDARK_OUT }}/risk-passport.md
             ${{ env.SOLIDDARK_OUT }}/risk-passport.sig
             ${{ env.SOLIDDARK_OUT }}/scan-manifest.json
+            ${{ env.SOLIDDARK_OUT }}/ci-runtime.json
             ${{ env.SOLIDDARK_OUT }}/risk-passport.registry.json
             ${{ env.SOLIDDARK_OUT }}/risk-passport.registry.sig
             ${{ env.SOLIDDARK_OUT }}/continuity-pack

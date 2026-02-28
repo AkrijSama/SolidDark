@@ -96,6 +96,7 @@ The public baseline policy issues `baseline` receipts. Private policy modules ca
 - Publish uploads counts and hashes only.
 - No file paths, dependency names, or code snippets are sent to the registry.
 - Benchmark ingestion is opt-in.
+- CI writes `ci-runtime.json` so skipped premium or publish paths are recorded as `UNKNOWN` with a reason.
 - See [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Documentation
