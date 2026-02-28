@@ -51,7 +51,7 @@ jobs:
       - name: Install private modules
         if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' }}
         run: |
-          pnpm add --no-save @akrijsama/private-core @akrijsama/private-registry
+          pnpm add -Dw @akrijsama/private-core @akrijsama/private-registry
           echo "SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE=$PWD/node_modules/@akrijsama/private-core/dist/index.js" >> "$GITHUB_ENV"
           echo "SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE=$PWD/node_modules/@akrijsama/private-registry/dist/index.js" >> "$GITHUB_ENV"
 
