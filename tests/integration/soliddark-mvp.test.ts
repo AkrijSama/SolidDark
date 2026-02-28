@@ -12,6 +12,7 @@ import { riskPassportSchema } from "../../packages/spec/src/index.js";
 import { runCli } from "../../packages/cli/src/index.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const supportDir = resolve(repoRoot, "tests", "support");
 
 async function makeTempDir(prefix: string) {
   return await mkdtemp(join(tmpdir(), prefix));
@@ -323,6 +324,73 @@ describe("SolidDark proprietary defensibility MVP", () => {
         },
       );
     } finally {
+      await server.close();
+    }
+  });
+
+  it("loads a private core overlay when configured", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    process.env.SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE = join(supportDir, "private-core-hooks.mjs");
+
+    try {
+      const { passport, manifest } = await scanProject(fixtureDir, {
+        offline: true,
+        registryClient: {
+          async getPercentile() {
+            return { percentile: 82, dataset_size: 11 };
+          },
+        },
+      });
+
+      expect(passport.risk_score.drivers.some((driver) => driver.label === "Private trust weighting")).toBe(true);
+      expect(passport.next_actions[0]?.action).toContain("managed SolidDark review");
+      expect(passport.enrichment.status).toBe("ok");
+      expect(manifest.steps.some((step) => step.step === "private-risk-overlay" && step.status === "ok")).toBe(true);
+    } finally {
+      delete process.env.SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE;
+    }
+  });
+
+  it("blocks registry issuance when a private policy denies it", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    const homeDir = await makeTempDir("soliddark-home-");
+    const outDir = await makeTempDir("soliddark-out-");
+    const registryDir = await makeTempDir("soliddark-registry-");
+    withTempHome(homeDir);
+    process.env.SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE = join(supportDir, "private-registry-policy.mjs");
+
+    const server = await startRegistryServer({
+      host: "127.0.0.1",
+      port: 4014,
+      apiKey: "deny-key",
+      dataDir: registryDir,
+      listen: false,
+    });
+
+    try {
+      const baseUrl = "http://127.0.0.1:4014";
+      await withMockedRegistryFetch(
+        baseUrl,
+        async (url, init) => {
+          const pathname = new URL(url).pathname + new URL(url).search;
+          const response = await server.app.inject({
+            method: (init?.method ?? "GET") as "GET" | "POST",
+            url: pathname,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            payload: typeof init?.body === "string" ? init.body : undefined,
+          }) as unknown as { body: string; statusCode: number };
+          return new Response(response.body, { status: response.statusCode });
+        },
+        async () => {
+          await runCli(["keys", "generate"], repoRoot);
+          await runCli(["registry", "login", "--api-key", "deny-key", "--url", baseUrl], repoRoot);
+          await runCli(["scan", fixtureDir, "--offline", "--out", outDir], repoRoot);
+
+          await expect(runCli(["publish", join(outDir, "risk-passport.json")], repoRoot)).rejects.toThrow(/Issuance denied by policy/i);
+        },
+      );
+    } finally {
+      delete process.env.SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE;
       await server.close();
     }
   });

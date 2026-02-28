@@ -92,6 +92,21 @@ soliddark export vendor-packet --passport <file> --continuity <dir> [--out <dir|
 - [docs/DEFENSIBILITY.md](/home/akrij/SolidDark/soliddark/docs/DEFENSIBILITY.md)
 - [docs/PRIVACY.md](/home/akrij/SolidDark/soliddark/docs/PRIVACY.md)
 - [docs/THREAT_MODEL.md](/home/akrij/SolidDark/soliddark/docs/THREAT_MODEL.md)
+- [docs/PUBLIC_PRIVATE_AUDIT.md](/home/akrij/SolidDark/soliddark/docs/PUBLIC_PRIVATE_AUDIT.md)
+
+## Private extension points
+
+This repo now supports replacing monetizable logic without changing the public spec or CLI contract.
+
+- `SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE`
+  Optional module that can provide a private enricher and private risk overlay.
+- `SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE`
+  Optional module that can provide a private issuance policy for the registry.
+
+If either env var is set and the module cannot be loaded, the failure is explicit:
+
+- scan records `UNKNOWN` for private-core load failures
+- registry issuance returns an explicit error instead of silently falling back
 
 ## Test commands
 

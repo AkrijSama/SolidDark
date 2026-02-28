@@ -17,10 +17,13 @@ import {
 import {
   benchmarkIngestSchema,
   type RegistryEnvelope,
+  type RegistryPublishPayload,
   registryEnvelopeSchema,
   registryPublishPayloadSchema,
   registryVerifyResponseSchema,
 } from "@soliddark/spec";
+
+import { loadRegistryIssuancePolicy } from "./policy.js";
 
 const require = createRequire(import.meta.url);
 
@@ -141,6 +144,28 @@ function countersignEnvelope(keyRecord: RegistryKeyRecord, fields: Omit<Registry
   return signCanonicalJson(fields, keyRecord.secretKey);
 }
 
+async function authorizeIssuance(payload: RegistryPublishPayload) {
+  const policy = await loadRegistryIssuancePolicy();
+  if (policy.status === "unknown") {
+    return {
+      status: "unknown" as const,
+      allow: false,
+      issuer: "SolidDark Registry",
+      reason: policy.unknown_reason ?? "Private registry policy failed to load.",
+      source: policy.source,
+    };
+  }
+
+  const decision = await policy.policy.beforeIssue({ payload });
+  return {
+    status: decision.status,
+    allow: decision.allow,
+    issuer: decision.issuer ?? "SolidDark Registry",
+    reason: decision.error_reason ?? decision.unknown_reason ?? decision.notes?.join(" | "),
+    source: policy.source,
+  };
+}
+
 export async function startRegistryServer(options?: RegistryOptions) {
   const dataDir = resolveDataDir(options);
   const apiKey = options?.apiKey ?? process.env.SOLIDDARK_REGISTRY_API_KEY ?? "soliddark-dev-key";
@@ -158,6 +183,7 @@ export async function startRegistryServer(options?: RegistryOptions) {
     registry_pubkey_id: keyRecord.publicKeyId,
     public_key: keyRecord.publicKey,
     db_path: database.dbPath,
+    private_policy_source: process.env.SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE ?? "@soliddark/private-registry",
   }));
 
   app.post("/v1/issue", async (request, reply) => {
@@ -166,11 +192,30 @@ export async function startRegistryServer(options?: RegistryOptions) {
     }
 
     const payload = registryPublishPayloadSchema.parse(request.body);
+    const policyDecision = await authorizeIssuance(payload);
+    if (policyDecision.status === "unknown") {
+      return reply.code(503).send({
+        error: `Issuance policy unavailable (${policyDecision.source}): ${policyDecision.reason ?? "UNKNOWN"}`,
+      });
+    }
+
+    if (policyDecision.status === "error") {
+      return reply.code(503).send({
+        error: `Issuance policy failed (${policyDecision.source}): ${policyDecision.reason ?? "ERROR"}`,
+      });
+    }
+
+    if (!policyDecision.allow) {
+      return reply.code(403).send({
+        error: `Issuance denied by policy (${policyDecision.source}): ${policyDecision.reason ?? "Denied"}`,
+      });
+    }
+
     const envelopeFields: Omit<RegistryEnvelope, "signature"> = {
       verification_id: randomVerificationId(),
       passport_hash: payload.passport_hash,
       issued_at: new Date().toISOString(),
-      issuer: "SolidDark Registry",
+      issuer: policyDecision.issuer as RegistryEnvelope["issuer"],
       registry_pubkey_id: keyRecord.publicKeyId,
     };
     const signature = countersignEnvelope(keyRecord, envelopeFields);

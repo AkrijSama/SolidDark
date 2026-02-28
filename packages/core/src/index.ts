@@ -7,4 +7,5 @@ export * from "./fs.js";
 export * from "./git.js";
 export * from "./markdown.js";
 export * from "./parsers.js";
+export * from "./private.js";
 export * from "./scan.js";

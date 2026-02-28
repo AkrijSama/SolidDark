@@ -20,6 +20,7 @@ import { RegistryPercentileEnricher, type Enricher, NoopEnricher, type Percentil
 import { listFiles, pathExists } from "./fs.js";
 import { collectRepoSignal } from "./git.js";
 import { parseNodeDependencies, parsePythonDependencies, detectProjectTypes } from "./parsers.js";
+import { loadPrivateCoreHooks } from "./private.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -412,6 +413,64 @@ function buildContradictions(root: string, projectTypes: string[], state: Mutabl
   contradictions.forEach((item) => state.contradictions.push(item));
 }
 
+async function resolveEnricher(
+  options: ScanOptions,
+  state: MutableScanState,
+): Promise<Enricher> {
+  if (options.enricher) {
+    addStep(state, "private-enricher", "ok", "Explicit enricher provided by caller.");
+    return options.enricher;
+  }
+
+  const privateHooks = await loadPrivateCoreHooks();
+  if (privateHooks.status === "unknown") {
+    addUnknown(state, "private-enricher", "private-core-load-failed", privateHooks.unknown_reason ?? "Private core module failed to load.");
+    addStep(state, "private-enricher", "unknown", privateHooks.unknown_reason ?? "Private core module failed to load.");
+  } else if (privateHooks.hooks?.createEnricher) {
+    addStep(state, "private-enricher", "ok", `Loaded from ${privateHooks.source}.`);
+    return privateHooks.hooks.createEnricher();
+  } else {
+    addStep(state, "private-enricher", "ok", "Public baseline enricher active.");
+  }
+
+  return options.registryClient ? new RegistryPercentileEnricher() : new NoopEnricher();
+}
+
+async function applyPrivateRiskOverlay(passport: RiskPassport, state: MutableScanState) {
+  const privateHooks = await loadPrivateCoreHooks();
+  if (privateHooks.status === "unknown") {
+    addUnknown(state, "private-risk-overlay", "private-core-load-failed", privateHooks.unknown_reason ?? "Private core module failed to load.");
+    addStep(state, "private-risk-overlay", "unknown", privateHooks.unknown_reason ?? "Private core module failed to load.");
+    return passport;
+  }
+
+  if (!privateHooks.hooks?.overlayRiskModel) {
+    addStep(state, "private-risk-overlay", "ok", "Public baseline risk model active.");
+    return passport;
+  }
+
+  const result = await privateHooks.hooks.overlayRiskModel(passport);
+  if (result.status === "unknown") {
+    addUnknown(state, "private-risk-overlay", "overlay-unknown", result.unknown_reason ?? "Private risk overlay returned UNKNOWN.");
+    addStep(state, "private-risk-overlay", "unknown", result.unknown_reason ?? "Private risk overlay returned UNKNOWN.");
+    return passport;
+  }
+
+  if (result.status === "error") {
+    addError(state, "private-risk-overlay", "overlay-error", result.error_reason ?? "Private risk overlay failed.");
+    addStep(state, "private-risk-overlay", "error", result.error_reason ?? "Private risk overlay failed.");
+    return passport;
+  }
+
+  addStep(state, "private-risk-overlay", "ok", result.notes?.join(" | ") || `Loaded from ${privateHooks.source}.`);
+  return {
+    ...passport,
+    risk_score: result.risk_score ?? passport.risk_score,
+    enrichment: result.enrichment ?? passport.enrichment,
+    next_actions: result.next_actions ?? passport.next_actions,
+  };
+}
+
 export async function scanProject(targetPath: string, options: ScanOptions = {}) {
   const root = resolve(targetPath);
   const state = createState();
@@ -500,7 +559,7 @@ export async function scanProject(targetPath: string, options: ScanOptions = {})
     errors: state.errors,
   };
 
-  const enricher = options.enricher ?? (options.registryClient ? new RegistryPercentileEnricher() : new NoopEnricher());
+  const enricher = await resolveEnricher(options, state);
   const enrichment = await enricher.enrich(basePassport as RiskPassport, { registryClient: options.registryClient ?? null });
   const passport: RiskPassport = {
     ...basePassport,
@@ -508,10 +567,12 @@ export async function scanProject(targetPath: string, options: ScanOptions = {})
     next_actions: [],
   };
   passport.next_actions = buildNextActions(passport);
+  const finalPassport = await applyPrivateRiskOverlay(passport, state);
+  finalPassport.summary.unknowns_count = state.unknowns.length;
 
   const manifest: ScanManifest = {
     spec_version: TOOL_VERSION,
-    generated_at: passport.generated_at,
+    generated_at: finalPassport.generated_at,
     tool_version: TOOL_VERSION,
     target_path: root,
     steps: state.steps,
@@ -520,5 +581,5 @@ export async function scanProject(targetPath: string, options: ScanOptions = {})
     disclaimers: [...DISCLAIMERS],
   };
 
-  return { passport, manifest };
+  return { passport: finalPassport, manifest };
 }
