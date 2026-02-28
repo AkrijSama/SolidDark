@@ -281,7 +281,16 @@ describe("SolidDark proprietary defensibility MVP", () => {
           const sigPath = join(outDir, "risk-passport.sig");
           const registryPath = join(outDir, "risk-passport.registry.json");
 
-          await runCli(["publish", passportPath, "--bench-opt-in"], repoRoot);
+          const publishRun = await captureLogs(async () => {
+            await runCli(["publish", passportPath, "--bench-opt-in"], repoRoot);
+          });
+          const publishPayload = JSON.parse(publishRun.lines.at(-1) ?? "{}") as {
+            verification_tier?: string;
+            verification_url?: string;
+          };
+
+          expect(publishPayload.verification_tier).toBe("baseline");
+          expect(publishPayload.verification_url).toContain("/verify/");
 
           const passRun = await captureLogs(async () => {
             await runCli(["verify", passportPath, "--sig", sigPath, "--registry-envelope", registryPath], repoRoot);
@@ -360,6 +369,7 @@ describe("SolidDark proprietary defensibility MVP", () => {
 
           const verifyBefore = await client.verify(envelope.verification_id);
           expect(verifyBefore.status).toBe("valid");
+          expect(verifyBefore.verification_tier).toBe("baseline");
 
           const revokeResult = await client.revoke(envelope.verification_id);
           expect(revokeResult.status).toBe("revoked");
@@ -372,8 +382,77 @@ describe("SolidDark proprietary defensibility MVP", () => {
           expect(percentile.dataset_size).toBeGreaterThan(0);
           expect(percentile.percentile).toBeGreaterThanOrEqual(0);
           expect(percentile.percentile).toBeLessThanOrEqual(100);
+
+          const networkStats = await client.getBenchmarkStats();
+          expect(networkStats.network_stats.issued_total).toBeGreaterThan(0);
+          expect(networkStats.network_stats.benchmark_records_total).toBeGreaterThan(0);
+          expect(networkStats.network_stats.tier_counts.baseline).toBeGreaterThan(0);
         },
       );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("renders a buyer-facing verification page without exposing repository contents", async () => {
+    const baseUrl = "http://127.0.0.1:4016";
+    const registryDir = await makeTempDir("soliddark-registry-");
+    const server = await startRegistryServer({
+      host: "127.0.0.1",
+      port: 4016,
+      apiKey: "page-key",
+      dataDir: registryDir,
+      listen: false,
+    });
+
+    try {
+      let envelopeId = "UNKNOWN";
+      await withMockedRegistryFetch(
+        baseUrl,
+        async (url, init) => {
+          const pathname = new URL(url).pathname + new URL(url).search;
+          const response = await server.app.inject({
+            method: (init?.method ?? "GET") as "GET" | "POST",
+            url: pathname,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            payload: typeof init?.body === "string" ? init.body : undefined,
+          }) as unknown as { body: string; statusCode: number; headers: Record<string, string> };
+          return new Response(response.body, { status: response.statusCode, headers: response.headers });
+        },
+        async () => {
+          const client = new RegistryClient({ baseUrl, apiKey: "page-key" });
+          const envelope = await client.issue({
+            passport_hash: "a".repeat(64),
+            tool_version: "0.1.0",
+            generated_at: new Date().toISOString(),
+            ecosystems: ["node"],
+            dependency_count: 4,
+            vuln_count: 0,
+            secret_findings_count: 0,
+            unknowns_count: 0,
+            project_label: "demo",
+          });
+          envelopeId = envelope.verification_id;
+          await client.ingestBenchmark({
+            ecosystem: "node",
+            metrics: { dep_count: 4 },
+            source: "test",
+            generated_at: new Date().toISOString(),
+          });
+        },
+      );
+
+      const response = await server.app.inject({
+        method: "GET",
+        url: `/verify/${envelopeId}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["content-type"]).toContain("text/html");
+      expect(response.body).toContain("SolidDark Trust Registry");
+      expect(response.body).toContain(envelopeId);
+      expect(response.body).toContain("Baseline receipt");
+      expect(response.body).not.toContain("node_modules");
     } finally {
       await server.close();
     }
@@ -546,6 +625,57 @@ describe("SolidDark proprietary defensibility MVP", () => {
           await runCli(["scan", fixtureDir, "--offline", "--out", outDir], repoRoot);
 
           await expect(runCli(["publish", join(outDir, "risk-passport.json")], repoRoot)).rejects.toThrow(/Issuance denied by policy/i);
+        },
+      );
+    } finally {
+      delete process.env.SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE;
+      await server.close();
+    }
+  });
+
+  it("allows private policy modules to elevate issuance tier", async () => {
+    const baseUrl = "http://127.0.0.1:4017";
+    const registryDir = await makeTempDir("soliddark-registry-");
+    process.env.SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE = join(supportDir, "private-registry-policy.mjs");
+
+    const server = await startRegistryServer({
+      host: "127.0.0.1",
+      port: 4017,
+      apiKey: "tier-key",
+      dataDir: registryDir,
+      listen: false,
+    });
+
+    try {
+      await withMockedRegistryFetch(
+        baseUrl,
+        async (url, init) => {
+          const pathname = new URL(url).pathname + new URL(url).search;
+          const response = await server.app.inject({
+            method: (init?.method ?? "GET") as "GET" | "POST",
+            url: pathname,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            payload: typeof init?.body === "string" ? init.body : undefined,
+          }) as unknown as { body: string; statusCode: number; headers: Record<string, string> };
+          return new Response(response.body, { status: response.statusCode, headers: response.headers });
+        },
+        async () => {
+          const client = new RegistryClient({ baseUrl, apiKey: "tier-key" });
+          const envelope = await client.issue({
+            passport_hash: "b".repeat(64),
+            tool_version: "0.1.0",
+            generated_at: new Date().toISOString(),
+            ecosystems: ["node"],
+            dependency_count: 1,
+            vuln_count: 0,
+            secret_findings_count: 0,
+            unknowns_count: 1,
+            project_label: "managed-review",
+          });
+          const verification = await client.verify(envelope.verification_id);
+
+          expect(envelope.verification_tier).toBe("verified");
+          expect(verification.verification_tier).toBe("verified");
         },
       );
     } finally {

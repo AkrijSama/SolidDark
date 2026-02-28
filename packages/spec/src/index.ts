@@ -192,12 +192,16 @@ export const registryPublishPayloadSchema = z.object({
 
 export type RegistryPublishPayload = z.infer<typeof registryPublishPayloadSchema>;
 
+export const verificationTierSchema = z.enum(["baseline", "reviewed", "verified"]);
+export type VerificationTier = z.infer<typeof verificationTierSchema>;
+
 export const registryEnvelopeSchema = z.object({
   verification_id: z.string().min(1),
   passport_hash: z.string().regex(/^[a-f0-9]{64}$/),
   issued_at: z.string().datetime(),
   issuer: z.literal("SolidDark Registry"),
   registry_pubkey_id: z.string().min(1),
+  verification_tier: verificationTierSchema,
   signature: z.string().min(1),
 });
 
@@ -211,6 +215,7 @@ export const registryVerifyResponseSchema = z.object({
   issued_at: z.string().datetime(),
   passport_hash: z.string().regex(/^[a-f0-9]{64}$/),
   registry_pubkey_id: z.string().min(1),
+  verification_tier: verificationTierSchema,
   revoked_at: z.string().datetime().nullable(),
   signature_valid: z.boolean(),
 });

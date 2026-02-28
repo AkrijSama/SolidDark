@@ -13,7 +13,7 @@ SolidDark does not provide representation and does not create an attorney-client
 
 - Open spec package for `risk-passport.json`
 - Local CLI for scan, signing, continuity, verification, and vendor packet export
-- Registry service for countersignatures, revocation, and benchmark percentiles
+- Registry service for countersignatures, tiered trust receipts, revocation, buyer-facing verification pages, and benchmark percentiles
 - SDK used by the CLI for registry communication
 - GitHub Actions example for release-attached diligence artifacts
 
@@ -54,6 +54,7 @@ To run the local registry for local development only:
 pnpm --filter @soliddark/cli exec soliddark registry dev
 pnpm --filter @soliddark/cli exec soliddark registry login --api-key soliddark-dev-key --url http://127.0.0.1:4010
 pnpm --filter @soliddark/cli exec soliddark publish ./.soliddark/demo/risk-passport.json --bench-opt-in
+pnpm --filter @soliddark/cli exec soliddark registry status
 pnpm --filter @soliddark/cli exec soliddark verify ./.soliddark/demo/risk-passport.json
 ```
 
@@ -81,6 +82,14 @@ soliddark export vendor-packet --passport <file> --continuity <dir> [--out <dir|
 - Vulnerability lookup becomes `UNKNOWN` with an explicit reason.
 - Registry verification never reports verified when the registry cannot be reached. It returns `UNKNOWN` with the reason instead.
 - No skipped step fails silently. Unknowns and errors are aggregated into the passport and `scan-manifest.json`.
+
+## Trust tiers
+
+- `baseline`: a registry receipt exists, but no managed review claim is implied.
+- `reviewed`: reserved for stronger policy gates or managed review flows.
+- `verified`: the strongest trust tier and the one that should anchor buyer-facing claims.
+
+The public baseline policy issues `baseline` receipts. Private policy modules can deny issuance or elevate the tier without changing the public spec or CLI contract.
 
 ## Privacy defaults
 

@@ -39,6 +39,19 @@ Benchmark ingestion is opt-in through `--bench-opt-in`. The MVP ingests anonymiz
 - source label
 - generated timestamp
 
+## Public registry telemetry
+
+The registry can expose aggregate network telemetry for buyer confidence and operator visibility. That telemetry is limited to counts and aggregate metadata such as:
+
+- issuance totals
+- revocation totals
+- benchmark record totals
+- trust-tier counts
+- ecosystems tracked
+- latest issuance timestamp
+
+It does not expose repository contents, dependency names, file paths, or passport bodies.
+
 ## Redaction rules
 
 - API keys are redacted on display.

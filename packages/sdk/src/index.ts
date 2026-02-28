@@ -3,6 +3,7 @@ import {
   registryEnvelopeSchema,
   registryPublishPayloadSchema,
   registryVerifyResponseSchema,
+  type VerificationTier,
 } from "@soliddark/spec";
 
 export type RegistryClientOptions = {
@@ -63,6 +64,45 @@ export class RegistryClient {
       public_key: string;
       created_at: string;
     };
+  }
+
+  async getStatus() {
+    const payload = (await this.request("/v1/status")) as {
+      status: "ok";
+      issuer: string;
+      registry_pubkey_id: string;
+      public_key: string;
+      verification_page_base_url: string;
+      private_policy_source: string;
+      network_stats: {
+        issued_total: number;
+        active_total: number;
+        revoked_total: number;
+        benchmark_records_total: number;
+        benchmark_sources_total: number;
+        ecosystems_tracked: string[];
+        latest_issued_at: string | null;
+        tier_counts: Record<VerificationTier, number>;
+      };
+    };
+    return payload;
+  }
+
+  async getBenchmarkStats() {
+    const payload = (await this.request("/v1/bench/stats")) as {
+      status: "ok";
+      network_stats: {
+        issued_total: number;
+        active_total: number;
+        revoked_total: number;
+        benchmark_records_total: number;
+        benchmark_sources_total: number;
+        ecosystems_tracked: string[];
+        latest_issued_at: string | null;
+        tier_counts: Record<VerificationTier, number>;
+      };
+    };
+    return payload;
   }
 
   async revoke(verificationId: string) {

@@ -40,13 +40,14 @@ Expected exports:
 
 Supported hook method:
 
-- `beforeIssue({ payload }): Promise<{ status, allow, issuer?, notes?, unknown_reason?, error_reason? }>`
+- `beforeIssue({ payload }): Promise<{ status, allow, issuer?, verification_tier?, notes?, unknown_reason?, error_reason? }>`
 
 Behavior:
 
 - if unset and no private package exists, the public baseline issuance policy stays active
 - if set and load fails, issuance fails explicitly
 - if the policy denies issuance, the registry returns a clear error and does not countersign
+- if the policy allows issuance, it can elevate the receipt from `baseline` to `reviewed` or `verified`
 
 ## Recommended next step
 

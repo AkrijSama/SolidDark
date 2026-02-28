@@ -11,6 +11,7 @@ export const registryIssuancePolicy = {
     return {
       status: "ok",
       allow: true,
+      verification_tier: "verified",
       notes: ["Private issuance policy approved the passport."],
     };
   },

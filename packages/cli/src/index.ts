@@ -183,7 +183,25 @@ async function commandRegistryLogin({ args }: CommandContext) {
 
 async function commandRegistryStatus() {
   const config = await readCliConfig();
-  console.log(JSON.stringify(summarizeConfig(config), null, 2));
+  const summary = summarizeConfig(config);
+  let remote: unknown = {
+    status: "unknown",
+    reason: "Registry status was not fetched.",
+  };
+
+  try {
+    remote = await buildRegistryClient(config).getStatus();
+  } catch (error) {
+    remote = {
+      status: "unknown",
+      reason: error instanceof Error ? error.message : "Unable to fetch registry status.",
+    };
+  }
+
+  console.log(JSON.stringify({
+    local: summary,
+    remote,
+  }, null, 2));
 }
 
 async function commandRegistryDev({ args }: CommandContext) {
@@ -313,7 +331,7 @@ async function commandPublish({ args }: CommandContext) {
   const outputDir = dirname(resolve(passportFile));
   const registryPath = join(outputDir, "risk-passport.registry.json");
   const registrySigPath = join(outputDir, "risk-passport.registry.sig");
-  const verificationUrl = `${config.registryUrl.replace(/\/+$/, "")}/v1/verify/${envelope.verification_id}`;
+  const verificationUrl = `${config.registryUrl.replace(/\/+$/, "")}/verify/${envelope.verification_id}`;
   await writeJsonFile(registryPath, { ...envelope, verification_url: verificationUrl });
   await writeTextFile(registrySigPath, `${envelope.signature}\n`);
 
@@ -335,6 +353,7 @@ async function commandPublish({ args }: CommandContext) {
     verification_id: envelope.verification_id,
     verification_url: verificationUrl,
     registry_pubkey_id: envelope.registry_pubkey_id,
+    verification_tier: envelope.verification_tier,
     files: [registryPath, registrySigPath],
     uploaded_fields: Object.keys(payload),
     bench_ingested: Boolean(flags["bench-opt-in"]),
@@ -377,6 +396,7 @@ async function verifyRegistryEnvelope(envelope: RegistryEnvelope, config: Awaite
           issued_at: envelope.issued_at,
           issuer: envelope.issuer,
           registry_pubkey_id: envelope.registry_pubkey_id,
+          verification_tier: envelope.verification_tier,
         },
         envelope.signature,
         verificationKey,
@@ -401,7 +421,7 @@ async function verifyRegistryEnvelope(envelope: RegistryEnvelope, config: Awaite
 
     return {
       status: "ok" as const,
-      message: `Registry record is ${verifyResult.status}.`,
+      message: `Registry record is ${verifyResult.status} at tier ${verifyResult.verification_tier}.`,
     };
   } catch (error) {
     return {
@@ -505,14 +525,20 @@ async function commandExportVendorPacket({ args }: CommandContext) {
 
   const registryArtifactPath = join(dirname(resolve(passportFile)), "risk-passport.registry.json");
   let verificationId = "UNKNOWN";
+  let verificationTier = "UNKNOWN";
+  let verificationUrl = "UNKNOWN";
   if (await pathExists(registryArtifactPath)) {
-    const envelope = await readJsonFile<{ verification_id?: string }>(registryArtifactPath);
+    const envelope = await readJsonFile<{ verification_id?: string; verification_tier?: string; verification_url?: string }>(registryArtifactPath);
     verificationId = envelope.verification_id ?? "UNKNOWN";
+    verificationTier = envelope.verification_tier ?? "UNKNOWN";
+    verificationUrl = envelope.verification_url ?? "UNKNOWN";
   }
 
   await writeTextFile(
     join(workingDir, "verification.txt"),
     `Verification ID: ${verificationId}
+Verification tier: ${verificationTier}
+Verification URL: ${verificationUrl}
 How to verify:
 - Local: soliddark verify ${join(workingDir, "risk-passport.json")}
 - Registry: use the verification ID against the SolidDark Registry verify endpoint.
@@ -537,6 +563,8 @@ ${DISCLAIMERS.join("\n")}
     status: "ok",
     output: outputPath,
     verification_id: verificationId,
+    verification_tier: verificationTier,
+    verification_url: verificationUrl,
   }, null, 2));
 }
 

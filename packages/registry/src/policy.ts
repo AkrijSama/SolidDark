@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { RegistryPublishPayload } from "@soliddark/spec";
+import type { RegistryPublishPayload, VerificationTier } from "@soliddark/spec";
 
 const DEFAULT_PRIVATE_POLICY_MODULE = "@soliddark/private-registry";
 const PRIVATE_POLICY_ENV = "SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE";
@@ -11,6 +11,7 @@ export interface RegistryIssuancePolicy {
     status: "ok" | "unknown" | "error";
     allow: boolean;
     issuer?: string;
+    verification_tier?: VerificationTier;
     notes?: string[];
     unknown_reason?: string;
     error_reason?: string;
@@ -23,6 +24,7 @@ class PublicIssuancePolicy implements RegistryIssuancePolicy {
       status: "ok" as const,
       allow: true,
       issuer: "SolidDark Registry",
+      verification_tier: "baseline" as const,
       notes: ["Public baseline issuance policy active."],
     };
   }
