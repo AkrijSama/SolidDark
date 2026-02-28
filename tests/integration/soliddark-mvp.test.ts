@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { renderRiskPassportMarkdown, scanProject } from "../../packages/core/src/index.js";
+import { generateEd25519KeyPair, renderRiskPassportMarkdown, scanProject, sha256Hex } from "../../packages/core/src/index.js";
 import { startRegistryServer } from "../../packages/registry/src/index.js";
 import { RegistryClient } from "../../packages/sdk/src/index.js";
 import { riskPassportSchema } from "../../packages/spec/src/index.js";
@@ -192,6 +192,57 @@ describe("SolidDark proprietary defensibility MVP", () => {
     expect(passport.contradictions.some((item) => item.message.includes("package-lock.json"))).toBe(true);
   });
 
+  it("maps OSV results back to the correct dependency after filtering versionless entries", async () => {
+    const fixtureDir = await makeTempDir("soliddark-osv-");
+    await writeFile(join(fixtureDir, "package.json"), `${JSON.stringify({ name: "osv-map", version: "1.0.0" }, null, 2)}\n`, "utf8");
+    await writeFile(
+      join(fixtureDir, "package-lock.json"),
+      `${JSON.stringify({
+        name: "osv-map",
+        version: "1.0.0",
+        lockfileVersion: 3,
+        packages: {
+          "": { name: "osv-map", version: "1.0.0" },
+          "node_modules/versionless-lib": { license: "MIT" },
+          "node_modules/real-lib": { version: "2.3.4", license: "MIT" },
+        },
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "https://api.osv.dev/v1/querybatch") {
+        return new Response(JSON.stringify({
+          results: [
+            {
+              vulns: [
+                {
+                  id: "OSV-DEMO-1",
+                  summary: "Mapped to real-lib",
+                },
+              ],
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return originalFetch(input as never, init);
+    }) as typeof globalThis.fetch;
+
+    try {
+      const { passport } = await scanProject(fixtureDir, { offline: false });
+      expect(passport.vulnerabilities.findings).toHaveLength(1);
+      expect(passport.vulnerabilities.findings[0]?.package).toBe("real-lib");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("signs, publishes, verifies PASS, and fails verification after tampering", async () => {
     const fixtureDir = await copyFixture("node-simple");
     const homeDir = await makeTempDir("soliddark-home-");
@@ -325,6 +376,114 @@ describe("SolidDark proprietary defensibility MVP", () => {
       );
     } finally {
       await server.close();
+    }
+  });
+
+  it("verifies historical envelopes after registry key rotation", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    const homeDir = await makeTempDir("soliddark-home-");
+    const outDir = await makeTempDir("soliddark-out-");
+    const registryDir = await makeTempDir("soliddark-registry-");
+    withTempHome(homeDir);
+
+    const baseUrl = "http://127.0.0.1:4015";
+    const server = await startRegistryServer({
+      host: "127.0.0.1",
+      port: 4015,
+      apiKey: "rotate-key",
+      dataDir: registryDir,
+      listen: false,
+    });
+
+    try {
+      await withMockedRegistryFetch(
+        baseUrl,
+        async (url, init) => {
+          const pathname = new URL(url).pathname + new URL(url).search;
+          const response = await server.app.inject({
+            method: (init?.method ?? "GET") as "GET" | "POST",
+            url: pathname,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            payload: typeof init?.body === "string" ? init.body : undefined,
+          }) as unknown as { body: string; statusCode: number };
+          return new Response(response.body, { status: response.statusCode });
+        },
+        async () => {
+          await runCli(["keys", "generate"], repoRoot);
+          await runCli(["registry", "login", "--api-key", "rotate-key", "--url", baseUrl], repoRoot);
+          await runCli(["scan", fixtureDir, "--offline", "--out", outDir], repoRoot);
+          await runCli(["publish", join(outDir, "risk-passport.json")], repoRoot);
+        },
+      );
+    } finally {
+      await server.close();
+    }
+
+    const rotatedPair = generateEd25519KeyPair();
+    await writeFile(
+      join(registryDir, "registry-keypair.json"),
+      `${JSON.stringify({
+        ...rotatedPair,
+        publicKeyId: sha256Hex(rotatedPair.publicKey).slice(0, 12),
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const rotatedServer = await startRegistryServer({
+      host: "127.0.0.1",
+      port: 4015,
+      apiKey: "rotate-key",
+      dataDir: registryDir,
+      listen: false,
+    });
+
+    try {
+      await withMockedRegistryFetch(
+        baseUrl,
+        async (url, init) => {
+          const pathname = new URL(url).pathname + new URL(url).search;
+          const response = await rotatedServer.app.inject({
+            method: (init?.method ?? "GET") as "GET" | "POST",
+            url: pathname,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            payload: typeof init?.body === "string" ? init.body : undefined,
+          }) as unknown as { body: string; statusCode: number };
+          return new Response(response.body, { status: response.statusCode });
+        },
+        async () => {
+          const passRun = await captureLogs(async () => {
+            await runCli([
+              "verify",
+              join(outDir, "risk-passport.json"),
+              "--sig",
+              join(outDir, "risk-passport.sig"),
+              "--registry-envelope",
+              join(outDir, "risk-passport.registry.json"),
+            ], repoRoot);
+          });
+          const payload = JSON.parse(passRun.lines.at(-1) ?? "{}") as { overall?: string };
+          expect(payload.overall).toBe("PASS");
+        },
+      );
+    } finally {
+      await rotatedServer.close();
+    }
+  });
+
+  it("refuses to start the registry without an explicit API key", async () => {
+    const previousApiKey = process.env.SOLIDDARK_REGISTRY_API_KEY;
+    delete process.env.SOLIDDARK_REGISTRY_API_KEY;
+
+    try {
+      await expect(startRegistryServer({
+        host: "127.0.0.1",
+        port: 4020,
+        listen: false,
+      })).rejects.toThrow(/SOLIDDARK_REGISTRY_API_KEY is required/i);
+    } finally {
+      if (previousApiKey) {
+        process.env.SOLIDDARK_REGISTRY_API_KEY = previousApiKey;
+      }
     }
   });
 

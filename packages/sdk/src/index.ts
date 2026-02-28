@@ -57,6 +57,14 @@ export class RegistryClient {
     return registryVerifyResponseSchema.parse(await this.request(`/v1/verify/${verificationId}`));
   }
 
+  async getPublicKey(registryPubkeyId: string) {
+    return (await this.request(`/v1/keys/${registryPubkeyId}`)) as {
+      registry_pubkey_id: string;
+      public_key: string;
+      created_at: string;
+    };
+  }
+
   async revoke(verificationId: string) {
     return registryVerifyResponseSchema.parse(await this.request(`/v1/revoke/${verificationId}`, {
       method: "POST",

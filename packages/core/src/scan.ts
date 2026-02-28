@@ -182,10 +182,8 @@ async function collectSecrets(root: string, state: MutableScanState, includePath
 }
 
 async function queryOsv(packages: Dependency[]) {
-  const queries = packages
-    .filter((dependency) => dependency.version)
-    .slice(0, 100)
-    .map((dependency) => ({
+  const queriedDependencies = packages.filter((dependency) => dependency.version).slice(0, 100);
+  const queries = queriedDependencies.map((dependency) => ({
       package: {
         name: dependency.name,
         ecosystem: dependency.ecosystem === "node" ? "npm" : "PyPI",
@@ -203,7 +201,7 @@ async function queryOsv(packages: Dependency[]) {
     throw new Error(`OSV request failed with status ${response.status}.`);
   }
 
-  return (await response.json()) as {
+  const batch = (await response.json()) as {
     results: Array<{
       vulns?: Array<{
         id?: string;
@@ -211,6 +209,11 @@ async function queryOsv(packages: Dependency[]) {
         severity?: Array<{ score?: string }>;
       }>;
     }>;
+  };
+
+  return {
+    queriedDependencies,
+    batch,
   };
 }
 
@@ -227,12 +230,12 @@ async function collectVulnerabilities(dependencies: Dependency[], state: Mutable
   }
 
   try {
-    const batch = await queryOsv(dependencies);
+    const { queriedDependencies, batch } = await queryOsv(dependencies);
     const findings: RiskPassport["vulnerabilities"]["findings"] = [];
 
     batch.results.forEach((result, index) => {
       result.vulns?.forEach((vulnerability) => {
-        const dependency = dependencies[index];
+        const dependency = queriedDependencies[index];
         if (!dependency) {
           return;
         }

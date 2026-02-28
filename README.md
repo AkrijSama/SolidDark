@@ -48,14 +48,16 @@ pnpm --filter @soliddark/cli exec soliddark export vendor-packet \
   --out ./.soliddark/vendor-packet
 ```
 
-To run the local registry:
+To run the local registry for local development only:
 
 ```bash
-pnpm --filter @soliddark/registry exec tsx src/index.ts
+pnpm --filter @soliddark/cli exec soliddark registry dev
 pnpm --filter @soliddark/cli exec soliddark registry login --api-key soliddark-dev-key --url http://127.0.0.1:4010
 pnpm --filter @soliddark/cli exec soliddark publish ./.soliddark/demo/risk-passport.json --bench-opt-in
 pnpm --filter @soliddark/cli exec soliddark verify ./.soliddark/demo/risk-passport.json
 ```
+
+`soliddark-dev-key` is a local-only default provided by `soliddark registry dev`. Production and shared deployments must set `SOLIDDARK_REGISTRY_API_KEY` explicitly.
 
 ## CLI surface
 
@@ -85,16 +87,16 @@ soliddark export vendor-packet --passport <file> --continuity <dir> [--out <dir|
 - Publish uploads counts and hashes only.
 - No file paths, dependency names, or code snippets are sent to the registry.
 - Benchmark ingestion is opt-in.
-- See [docs/PRIVACY.md](/home/akrij/SolidDark/soliddark/docs/PRIVACY.md).
+- See [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Documentation
 
-- [docs/DEFENSIBILITY.md](/home/akrij/SolidDark/soliddark/docs/DEFENSIBILITY.md)
-- [docs/PRIVACY.md](/home/akrij/SolidDark/soliddark/docs/PRIVACY.md)
-- [docs/THREAT_MODEL.md](/home/akrij/SolidDark/soliddark/docs/THREAT_MODEL.md)
-- [docs/PUBLIC_PRIVATE_AUDIT.md](/home/akrij/SolidDark/soliddark/docs/PUBLIC_PRIVATE_AUDIT.md)
-- [docs/PRIVATE_MODULES.md](/home/akrij/SolidDark/soliddark/docs/PRIVATE_MODULES.md)
-- [docs/PRIVATE_PUBLISHING.md](/home/akrij/SolidDark/soliddark/docs/PRIVATE_PUBLISHING.md)
+- [docs/DEFENSIBILITY.md](docs/DEFENSIBILITY.md)
+- [docs/PRIVACY.md](docs/PRIVACY.md)
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
+- [docs/PUBLIC_PRIVATE_AUDIT.md](docs/PUBLIC_PRIVATE_AUDIT.md)
+- [docs/PRIVATE_MODULES.md](docs/PRIVATE_MODULES.md)
+- [docs/PRIVATE_PUBLISHING.md](docs/PRIVATE_PUBLISHING.md)
 
 ## Private extension points
 

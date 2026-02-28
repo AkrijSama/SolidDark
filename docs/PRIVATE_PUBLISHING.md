@@ -43,7 +43,6 @@ Use GitHub Packages for scoped private packages:
 }
 ```
 
-Repeat the same pattern for `@soliddark/private-registry`.
 Repeat the same pattern for `@akrijsama/private-registry`.
 
 ## Authentication
@@ -98,7 +97,7 @@ jobs:
 
 ## Public repo CI injection
 
-The public repo’s [soliddark.yml](/home/akrij/SolidDark/soliddark/.github/workflows/soliddark.yml) now supports private-module injection when these secrets are set:
+The public repo’s [`soliddark.yml`](../.github/workflows/soliddark.yml) now supports private-module injection when these secrets are set:
 
 - `SOLIDDARK_PRIVATE_MODULES=true`
 - optional `SOLIDDARK_PRIVATE_PACKAGES_TOKEN=<token with read:packages>`

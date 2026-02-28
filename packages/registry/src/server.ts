@@ -41,6 +41,12 @@ type RegistryKeyRecord = {
   publicKeyId: string;
 };
 
+type StoredRegistryKey = {
+  pubkey_id: string;
+  public_key: string;
+  created_at: string;
+};
+
 function resolveDataDir(options?: RegistryOptions) {
   return resolve(options?.dataDir ?? join(process.cwd(), "packages/registry/data"));
 }
@@ -83,6 +89,13 @@ async function loadDatabase(dataDir: string) {
   const dbPath = join(dataDir, "registry.sqlite");
   const db = existsSync(dbPath) ? new SQL.Database(readFileSync(dbPath)) : new SQL.Database();
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS registry_keys (
+      pubkey_id TEXT PRIMARY KEY,
+      public_key TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
   db.run(`
     CREATE TABLE IF NOT EXISTS issuances (
       verification_id TEXT PRIMARY KEY,
@@ -140,6 +153,21 @@ function getSingleRow(db: Database, query: string, params: unknown[] = []) {
   );
 }
 
+function saveRegistryKey(db: Database, keyRecord: RegistryKeyRecord) {
+  db.run(
+    `INSERT OR IGNORE INTO registry_keys (pubkey_id, public_key, created_at) VALUES (?, ?, ?)`,
+    [keyRecord.publicKeyId, keyRecord.publicKey, new Date().toISOString()],
+  );
+}
+
+function getRegistryKey(db: Database, pubkeyId: string): StoredRegistryKey | null {
+  return getSingleRow(
+    db,
+    `SELECT pubkey_id, public_key, created_at FROM registry_keys WHERE pubkey_id = ?`,
+    [pubkeyId],
+  ) as StoredRegistryKey | null;
+}
+
 function countersignEnvelope(keyRecord: RegistryKeyRecord, fields: Omit<RegistryEnvelope, "signature">) {
   return signCanonicalJson(fields, keyRecord.secretKey);
 }
@@ -168,9 +196,14 @@ async function authorizeIssuance(payload: RegistryPublishPayload) {
 
 export async function startRegistryServer(options?: RegistryOptions) {
   const dataDir = resolveDataDir(options);
-  const apiKey = options?.apiKey ?? process.env.SOLIDDARK_REGISTRY_API_KEY ?? "soliddark-dev-key";
+  const apiKey = options?.apiKey ?? process.env.SOLIDDARK_REGISTRY_API_KEY;
+  if (!apiKey) {
+    throw new Error("SOLIDDARK_REGISTRY_API_KEY is required. Use `soliddark registry dev` for local development defaults.");
+  }
   const keyRecord = loadOrCreateKeyRecord(dataDir);
   const database = await loadDatabase(dataDir);
+  saveRegistryKey(database.db, keyRecord);
+  database.persist();
   const host = options?.host ?? "127.0.0.1";
   const port = options?.port ?? 4010;
   let publicBaseUrl = `http://${host}:${port}`;
@@ -185,6 +218,20 @@ export async function startRegistryServer(options?: RegistryOptions) {
     db_path: database.dbPath,
     private_policy_source: process.env.SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE ?? "@soliddark/private-registry",
   }));
+
+  app.get("/v1/keys/:keyId", async (request, reply) => {
+    const keyId = String((request.params as { keyId?: string }).keyId ?? "");
+    const key = getRegistryKey(database.db, keyId);
+    if (!key) {
+      return reply.code(404).send({ error: "Registry public key not found." });
+    }
+
+    return {
+      registry_pubkey_id: key.pubkey_id,
+      public_key: key.public_key,
+      created_at: key.created_at,
+    };
+  });
 
   app.post("/v1/issue", async (request, reply) => {
     if (!authenticate(request, apiKey)) {
@@ -254,7 +301,7 @@ export async function startRegistryServer(options?: RegistryOptions) {
     const verificationId = String((request.params as { verificationId?: string }).verificationId ?? "");
     const row = getSingleRow(
       database.db,
-      `SELECT verification_id, passport_hash, issued_at, registry_pubkey_id, signature, revoked_at FROM issuances WHERE verification_id = ?`,
+      `SELECT verification_id, passport_hash, issued_at, issuer, registry_pubkey_id, signature, revoked_at FROM issuances WHERE verification_id = ?`,
       [verificationId],
     );
 
@@ -270,11 +317,12 @@ export async function startRegistryServer(options?: RegistryOptions) {
       });
     }
 
+    const verificationKey = getRegistryKey(database.db, String(row.registry_pubkey_id));
     const signaturePayload = {
       verification_id: String(row.verification_id),
       passport_hash: String(row.passport_hash),
       issued_at: String(row.issued_at),
-      issuer: REGISTRY_ISSUER,
+      issuer: String(row.issuer),
       registry_pubkey_id: String(row.registry_pubkey_id),
     };
 
@@ -285,7 +333,9 @@ export async function startRegistryServer(options?: RegistryOptions) {
       passport_hash: String(row.passport_hash),
       registry_pubkey_id: String(row.registry_pubkey_id),
       revoked_at: row.revoked_at ? String(row.revoked_at) : null,
-      signature_valid: verifyCanonicalJson(signaturePayload, String(row.signature), keyRecord.publicKey),
+      signature_valid: verificationKey
+        ? verifyCanonicalJson(signaturePayload, String(row.signature), verificationKey.public_key)
+        : false,
     });
   });
 

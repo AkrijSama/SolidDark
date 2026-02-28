@@ -8,6 +8,7 @@ export type CliConfig = {
   registryUrl: string;
   registryPublicKey: string | null;
   registryPublicKeyId: string | null;
+  registryPublicKeys: Record<string, string>;
   signingKeyPath: string;
 };
 
@@ -30,6 +31,7 @@ export async function readCliConfig(): Promise<CliConfig> {
     registryUrl: DEFAULT_REGISTRY_URL,
     registryPublicKey: null,
     registryPublicKeyId: null,
+    registryPublicKeys: {},
     signingKeyPath: getDefaultSigningKeyPath(),
   };
 
@@ -43,6 +45,7 @@ export async function readCliConfig(): Promise<CliConfig> {
     registryUrl: stored.registryUrl ?? defaults.registryUrl,
     registryPublicKey: stored.registryPublicKey ?? defaults.registryPublicKey,
     registryPublicKeyId: stored.registryPublicKeyId ?? defaults.registryPublicKeyId,
+    registryPublicKeys: stored.registryPublicKeys ?? defaults.registryPublicKeys,
     signingKeyPath: stored.signingKeyPath ?? defaults.signingKeyPath,
   };
 }
@@ -71,6 +74,7 @@ export function summarizeConfig(config: CliConfig) {
     registryUrl: config.registryUrl,
     apiKey: config.apiKey ? redactToken(config.apiKey) : null,
     registryPublicKeyId: config.registryPublicKeyId,
+    cachedRegistryKeys: Object.keys(config.registryPublicKeys),
     signingKeyPath: config.signingKeyPath,
   };
 }

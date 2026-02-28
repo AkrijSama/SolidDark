@@ -13,7 +13,6 @@ import {
   pathExists,
   readJsonFile,
   redactToken,
-  RegistryPercentileEnricher,
   renderExecutiveSummary,
   renderRiskPassportMarkdown,
   scanProject,
@@ -104,7 +103,6 @@ function buildRegistryClient(config: Awaited<ReturnType<typeof readCliConfig>>) 
 }
 
 async function ensureRegistryMetadata(config: Awaited<ReturnType<typeof readCliConfig>>) {
-  const client = buildRegistryClient(config);
   const response = await fetch(`${config.registryUrl.replace(/\/+$/, "")}/v1/status`);
   if (!response.ok) {
     throw new Error(`Registry status failed with ${response.status}.`);
@@ -116,7 +114,23 @@ async function ensureRegistryMetadata(config: Awaited<ReturnType<typeof readCliC
   };
   config.registryPublicKey = payload.public_key;
   config.registryPublicKeyId = payload.registry_pubkey_id;
+  config.registryPublicKeys[payload.registry_pubkey_id] = payload.public_key;
   await writeCliConfig(config);
+}
+
+async function ensureRegistryKey(config: Awaited<ReturnType<typeof readCliConfig>>, registryPubkeyId: string) {
+  if (config.registryPublicKeys[registryPubkeyId]) {
+    return config.registryPublicKeys[registryPubkeyId];
+  }
+
+  const payload = await buildRegistryClient(config).getPublicKey(registryPubkeyId);
+  config.registryPublicKeys[payload.registry_pubkey_id] = payload.public_key;
+  if (payload.registry_pubkey_id === config.registryPublicKeyId || !config.registryPublicKey) {
+    config.registryPublicKey = payload.public_key;
+    config.registryPublicKeyId = payload.registry_pubkey_id;
+  }
+  await writeCliConfig(config);
+  return payload.public_key;
 }
 
 function buildArtifactRoot(basePath: string, explicitOut?: string) {
@@ -178,8 +192,9 @@ async function commandRegistryDev({ args }: CommandContext) {
   const port = typeof flags.port === "string" ? Number(flags.port) : 4010;
   const host = typeof flags.host === "string" ? flags.host : "127.0.0.1";
   const dataDir = typeof flags["data-dir"] === "string" ? flags["data-dir"] : undefined;
+  const apiKey = process.env.SOLIDDARK_REGISTRY_API_KEY ?? "soliddark-dev-key";
 
-  const server = await startRegistryServer({ port, host, dataDir });
+  const server = await startRegistryServer({ port, host, dataDir, apiKey });
   console.log(`SolidDark registry listening on http://${host}:${port}`);
   console.log(`API key: ${server.apiKey}`);
   console.log(`Registry public key id: ${server.keyRecord.publicKeyId}`);
@@ -198,7 +213,6 @@ async function commandScan({ args }: CommandContext) {
   const { passport, manifest } = await scanProject(targetPath, {
     offline: Boolean(flags.offline),
     includePaths: Boolean(flags["include-paths"]),
-    enricher: registryClient ? new RegistryPercentileEnricher() : undefined,
     registryClient,
   });
 
@@ -330,7 +344,11 @@ async function commandPublish({ args }: CommandContext) {
 async function verifyRegistryEnvelope(envelope: RegistryEnvelope, config: Awaited<ReturnType<typeof readCliConfig>>) {
   if (!config.registryPublicKey || config.registryPublicKeyId !== envelope.registry_pubkey_id) {
     try {
-      await ensureRegistryMetadata(config);
+      if (config.registryPublicKeyId === envelope.registry_pubkey_id && config.registryPublicKey) {
+        config.registryPublicKeys[config.registryPublicKeyId] = config.registryPublicKey;
+      } else {
+        await ensureRegistryMetadata(config);
+      }
     } catch (error) {
       return {
         status: "unknown" as const,
@@ -339,7 +357,19 @@ async function verifyRegistryEnvelope(envelope: RegistryEnvelope, config: Awaite
     }
   }
 
-  const valid = config.registryPublicKey
+  let verificationKey = config.registryPublicKeys[envelope.registry_pubkey_id] ?? null;
+  if (!verificationKey) {
+    try {
+      verificationKey = await ensureRegistryKey(config, envelope.registry_pubkey_id);
+    } catch (error) {
+      return {
+        status: "unknown" as const,
+        message: error instanceof Error ? error.message : "Unable to resolve registry signing key.",
+      };
+    }
+  }
+
+  const valid = verificationKey
     ? verifyCanonicalJson(
         {
           verification_id: envelope.verification_id,
@@ -349,7 +379,7 @@ async function verifyRegistryEnvelope(envelope: RegistryEnvelope, config: Awaite
           registry_pubkey_id: envelope.registry_pubkey_id,
         },
         envelope.signature,
-        config.registryPublicKey,
+        verificationKey,
       )
     : false;
 
