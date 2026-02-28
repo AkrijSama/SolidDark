@@ -430,10 +430,11 @@ async function resolveEnricher(
     addStep(state, "private-enricher", "ok", `Loaded from ${privateHooks.source}.`);
     return privateHooks.hooks.createEnricher();
   } else {
-    addStep(state, "private-enricher", "ok", "Public baseline enricher active.");
+    addStep(state, "private-enricher", "ok", "Public baseline enricher active. Premium enrichment requires a private module.");
   }
 
-  return options.registryClient ? new RegistryPercentileEnricher() : new NoopEnricher();
+  void options.registryClient;
+  return new NoopEnricher();
 }
 
 async function applyPrivateRiskOverlay(passport: RiskPassport, state: MutableScanState) {

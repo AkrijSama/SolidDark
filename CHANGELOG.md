@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.1.1 - 2026-02-28
+
+Privatization-ready follow-up release.
+
+### Added
+
+- private core hook loader for premium enrichment and risk overlays
+- private registry policy loader for premium issuance control
+- documentation for private module contracts and deployment
+- local private package skeletons outside the public repo for `@soliddark/private-core` and `@soliddark/private-registry`
+
+### Changed
+
+- public scan path no longer auto-applies premium percentile enrichment
+- premium enrichment now requires `SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE`
+- premium issuance policy now requires `SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE`
+
+### Verification
+
+- `pnpm build:packages`
+- `pnpm test`
+- `pnpm exec tsc --noEmit`
+- local import verification for both private package skeletons
+
 ## v0.1.0 - 2026-02-28
 
 Initial seed-stage MVP release of the SolidDark trust registry architecture.
