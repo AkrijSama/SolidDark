@@ -2,7 +2,17 @@
 
 ## Goal
 
-Publish `@soliddark/private-core` and `@soliddark/private-registry` from a separate private repository so the public repo can consume them in private environments without storing premium logic here.
+Publish the private packages from a separate private repository so the public repo can consume them in private environments without storing premium logic here.
+
+Current working package scope:
+
+- `@akrijsama/private-core`
+- `@akrijsama/private-registry`
+
+Reason:
+
+- GitHub Packages for npm requires the package scope to match the owner namespace.
+- If you later create a `soliddark` GitHub org, you can re-scope the private packages there.
 
 ## Recommended repository layout
 
@@ -24,7 +34,7 @@ Use GitHub Packages for scoped private packages:
 
 ```json
 {
-  "name": "@soliddark/private-core",
+  "name": "@akrijsama/private-core",
   "version": "0.1.1",
   "private": false,
   "publishConfig": {
@@ -34,6 +44,7 @@ Use GitHub Packages for scoped private packages:
 ```
 
 Repeat the same pattern for `@soliddark/private-registry`.
+Repeat the same pattern for `@akrijsama/private-registry`.
 
 ## Authentication
 
@@ -44,8 +55,9 @@ In the private repo workflow:
 
 In consumers:
 
-- set `SOLIDDARK_PRIVATE_PACKAGES_TOKEN`
-- configure `@soliddark` to use `https://npm.pkg.github.com`
+- preferred: set `SOLIDDARK_PRIVATE_PACKAGES_TOKEN` with a token that has `read:packages`
+- fallback: use the workflow `GITHUB_TOKEN` with `packages: read` if the package access model for your repo allows it
+- configure `@akrijsama` to use `https://npm.pkg.github.com`
 
 ## Example publishing workflow
 
@@ -73,13 +85,13 @@ jobs:
         with:
           node-version: 20
           registry-url: https://npm.pkg.github.com
-          scope: "@soliddark"
+          scope: "@akrijsama"
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
-      - run: pnpm --filter @soliddark/private-core publish --no-git-checks
+      - run: pnpm --filter @akrijsama/private-core publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm --filter @soliddark/private-registry publish --no-git-checks
+      - run: pnpm --filter @akrijsama/private-registry publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -89,15 +101,17 @@ jobs:
 The public repo’s [soliddark.yml](/home/akrij/SolidDark/soliddark/.github/workflows/soliddark.yml) now supports private-module injection when these secrets are set:
 
 - `SOLIDDARK_PRIVATE_MODULES=true`
-- `SOLIDDARK_PRIVATE_PACKAGES_TOKEN=<token>`
+- optional `SOLIDDARK_PRIVATE_PACKAGES_TOKEN=<token with read:packages>`
 
 When enabled, CI:
 
 - authenticates against GitHub Packages
-- installs `@soliddark/private-core` and `@soliddark/private-registry`
+- installs `@akrijsama/private-core` and `@akrijsama/private-registry`
 - exports:
   - `SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE`
   - `SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE`
+
+If `SOLIDDARK_PRIVATE_PACKAGES_TOKEN` is absent, the workflow falls back to `github.token`. That may still require package access to be granted to the public repository in GitHub’s package settings.
 
 ## Local development
 

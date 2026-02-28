@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     env:
       SOLIDDARK_OUT: .soliddark/ci
       SOLIDDARK_REGISTRY_URL: ${{ secrets.SOLIDDARK_REGISTRY_URL }}
@@ -36,20 +37,23 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Configure GitHub Packages auth for private modules
-        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' && env.SOLIDDARK_PRIVATE_PACKAGES_TOKEN != '' }}
+        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          cat <<'EOF' >> ~/.npmrc
-          @soliddark:registry=https://npm.pkg.github.com
-          //npm.pkg.github.com/:_authToken=${SOLIDDARK_PRIVATE_PACKAGES_TOKEN}
+          TOKEN="${SOLIDDARK_PRIVATE_PACKAGES_TOKEN:-$GITHUB_TOKEN}"
+          cat <<EOF >> ~/.npmrc
+          @akrijsama:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=${TOKEN}
           always-auth=true
           EOF
 
       - name: Install private modules
-        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' && env.SOLIDDARK_PRIVATE_PACKAGES_TOKEN != '' }}
+        if: ${{ env.SOLIDDARK_PRIVATE_MODULES == 'true' }}
         run: |
-          pnpm add --no-save @soliddark/private-core @soliddark/private-registry
-          echo "SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE=$PWD/node_modules/@soliddark/private-core/dist/index.js" >> "$GITHUB_ENV"
-          echo "SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE=$PWD/node_modules/@soliddark/private-registry/dist/index.js" >> "$GITHUB_ENV"
+          pnpm add --no-save @akrijsama/private-core @akrijsama/private-registry
+          echo "SOLIDDARK_PRIVATE_CORE_HOOKS_MODULE=$PWD/node_modules/@akrijsama/private-core/dist/index.js" >> "$GITHUB_ENV"
+          echo "SOLIDDARK_PRIVATE_REGISTRY_POLICY_MODULE=$PWD/node_modules/@akrijsama/private-registry/dist/index.js" >> "$GITHUB_ENV"
 
       - name: Build packages
         run: pnpm build:packages
