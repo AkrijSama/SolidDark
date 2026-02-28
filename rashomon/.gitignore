@@ -1,0 +1,11 @@
+node_modules
+.rashomon
+dist
+release
+playwright-report
+test-results
+.vite
+*.log
+*.sqlite
+*.db
+coverage

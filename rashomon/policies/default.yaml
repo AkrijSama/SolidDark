@@ -1,0 +1,126 @@
+# Rashomon Default Security Policy
+# Edit this file or create additional .yaml files in the policies/ directory
+
+version: "1.0"
+name: "Default Security Policy"
+
+global:
+  default_action: "allow"
+  log_all_requests: true
+  intent_analysis: false
+  max_request_body_bytes: 10485760
+  new_domain_action: "require_approval"
+
+domains:
+  allowed:
+    - "api.anthropic.com"
+    - "api.openai.com"
+    - "generativelanguage.googleapis.com"
+    - "api.github.com"
+    - "github.com"
+    - "registry.npmjs.org"
+    - "pypi.org"
+    - "cdn.jsdelivr.net"
+    - "cdnjs.cloudflare.com"
+    - "unpkg.com"
+    - "fonts.googleapis.com"
+    - "fonts.gstatic.com"
+
+  denied:
+    - "*.doubleclick.net"
+    - "*.adsense.google.com"
+    - "telemetry.*"
+    - "analytics.*"
+
+  require_approval:
+    - "*.pastebin.com"
+    - "*.transfer.sh"
+    - "*.file.io"
+    - "*.webhook.site"
+    - "*.requestbin.com"
+    - "*.ngrok.io"
+    - "*.serveo.net"
+
+secrets:
+  enabled: true
+  action: "block"
+  patterns:
+    - name: "AWS Access Key"
+      pattern: "AKIA[0-9A-Z]{16}"
+    - name: "AWS Secret Key"
+      pattern: "(?i)aws(.{0,20})?['\"][0-9a-zA-Z/+]{40}['\"]"
+    - name: "Generic API Key"
+      pattern: "(?i)(api[_-]?key|apikey|api[_-]?secret)\\s*[:=]\\s*['\"]?[a-zA-Z0-9_\\-]{20,}['\"]?"
+    - name: "Stripe Secret Key"
+      pattern: "sk_(live|test)_[0-9a-zA-Z]{24,}"
+    - name: "Stripe Publishable Key"
+      pattern: "pk_(live|test)_[0-9a-zA-Z]{24,}"
+    - name: "Database Connection String"
+      pattern: "(?i)(postgres|mysql|mongodb|redis)://[^\\s'\"]+"
+    - name: "Private Key"
+      pattern: "-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----"
+    - name: "JWT Token"
+      pattern: "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}"
+    - name: "GitHub Token"
+      pattern: "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}"
+    - name: "Supabase Key"
+      pattern: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\\.[A-Za-z0-9_-]{50,}"
+    - name: "Env File Content"
+      pattern: "(?m)^[A-Z_]{2,}=.{8,}$"
+  entropy_detection:
+    enabled: true
+    min_length: 20
+    min_entropy: 4.5
+    action: "alert"
+
+sensitive_files:
+  enabled: true
+  action: "alert"
+  paths:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/.aws/credentials"
+    - "**/.ssh/id_*"
+    - "**/.npmrc"
+    - "**/.netrc"
+    - "**/.git-credentials"
+    - "**/secrets.*"
+    - "**/credentials.*"
+    - "**/*.pem"
+    - "**/*.key"
+
+rate_limits:
+  enabled: true
+  per_agent:
+    requests_per_minute: 120
+    requests_per_hour: 3000
+    max_concurrent: 20
+  per_domain:
+    requests_per_minute: 60
+    requests_per_hour: 1000
+
+agents:
+  profiles:
+    - name: "cursor"
+      process_patterns: ["Cursor", "cursor"]
+      allowed_domains_extra: ["cursor.sh", "*.cursor.sh"]
+      max_body_bytes: 5242880
+
+    - name: "claude-code"
+      process_patterns: ["claude", "claude-code"]
+      allowed_domains_extra: ["api.anthropic.com", "statsig.anthropic.com"]
+      max_body_bytes: 5242880
+
+    - name: "aider"
+      process_patterns: ["aider"]
+      allowed_domains_extra: []
+      max_body_bytes: 2097152
+
+    - name: "github-copilot"
+      process_patterns: ["copilot", "GitHub Copilot"]
+      allowed_domains_extra: ["copilot-proxy.githubusercontent.com", "*.githubcopilot.com"]
+      max_body_bytes: 2097152
+
+  unknown_agent:
+    action: "require_approval"
+    max_body_bytes: 1048576
