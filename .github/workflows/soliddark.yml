@@ -77,17 +77,17 @@ jobs:
         run: pnpm build:packages
 
       - name: Generate signing key
-        run: pnpm --filter @soliddark/cli exec soliddark keys generate
+        run: node packages/cli/dist/bin.js keys generate
 
       - name: Scan repository
-        run: pnpm --filter @soliddark/cli exec soliddark scan . --out "$SOLIDDARK_OUT"
+        run: node packages/cli/dist/bin.js scan . --out "$SOLIDDARK_OUT"
 
       - name: Build continuity pack
-        run: pnpm --filter @soliddark/cli exec soliddark continuity . --out "$SOLIDDARK_OUT"
+        run: node packages/cli/dist/bin.js continuity . --out "$SOLIDDARK_OUT"
 
       - name: Export vendor packet
         run: |
-          pnpm --filter @soliddark/cli exec soliddark export vendor-packet \
+          node packages/cli/dist/bin.js export vendor-packet \
             --passport "$SOLIDDARK_OUT/risk-passport.json" \
             --continuity "$SOLIDDARK_OUT/continuity-pack" \
             --out "$SOLIDDARK_OUT/vendor-packet"
@@ -95,13 +95,13 @@ jobs:
       - name: Registry login
         if: ${{ env.SOLIDDARK_REGISTRY_API_KEY != '' && env.SOLIDDARK_REGISTRY_URL != '' }}
         run: |
-          pnpm --filter @soliddark/cli exec soliddark registry login \
+          node packages/cli/dist/bin.js registry login \
             --api-key "$SOLIDDARK_REGISTRY_API_KEY" \
             --url "$SOLIDDARK_REGISTRY_URL"
 
       - name: Publish verification envelope
         if: ${{ env.SOLIDDARK_REGISTRY_API_KEY != '' && env.SOLIDDARK_REGISTRY_URL != '' }}
-        run: pnpm --filter @soliddark/cli exec soliddark publish "$SOLIDDARK_OUT/risk-passport.json" --bench-opt-in
+        run: node packages/cli/dist/bin.js publish "$SOLIDDARK_OUT/risk-passport.json" --bench-opt-in
 
       - name: Record CI runtime status
         if: ${{ always() }}
