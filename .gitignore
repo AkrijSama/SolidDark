@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/test-results
 
 # next.js
 /.next/
@@ -19,6 +20,12 @@
 
 # production
 /build
+/packages/*/dist
+/packages/*/node_modules
+/packages/*/src/*.js
+/packages/*/src/*.js.map
+/packages/*/src/*.d.ts
+/packages/*/src/*.d.ts.map
 
 # misc
 .DS_Store
@@ -39,3 +46,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma

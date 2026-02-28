@@ -1,0 +1,396 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// ============================================================
+// AUTH & USER
+// ============================================================
+
+model User {
+  id                String           @id @default(uuid())
+  email             String           @unique
+  fullName          String?
+  avatarUrl         String?
+  supabaseId        String           @unique
+  subscriptionTier  SubscriptionTier @default(FREE)
+  stripeCustomerId  String?          @unique
+  jurisdictions     String[]         @default(["US-FL"])
+  aiProvider        AIProvider       @default(CLAUDE_API)
+  localLlmUrl       String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  vaultEntries      VaultEntry[]
+  heirs             Heir[]
+  deadmanConfig     DeadmanConfig?
+  documents         GeneratedDocument[]
+  workEntries       WorkEntry[]
+  complianceScans   ComplianceScan[]
+  insurancePolicies InsurancePolicy[]
+  collectiveMembers CollectiveMember[]
+  soulConversations SoulConversation[]
+
+  @@map("users")
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  GROWTH
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum AIProvider {
+  CLAUDE_API
+  OPENAI_API
+  LOCAL_LLM
+}
+
+// ============================================================
+// THE SOUL (AI LEGAL ADVISOR)
+// ============================================================
+
+model SoulConversation {
+  id         String        @id @default(uuid())
+  userId     String
+  title      String        @default("New Conversation")
+  messages   SoulMessage[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("soul_conversations")
+}
+
+model SoulMessage {
+  id             String           @id @default(uuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  model          String?
+  jurisdictions  String[]
+  tokensUsed     Int?
+  createdAt      DateTime         @default(now())
+
+  conversation   SoulConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("soul_messages")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// ============================================================
+// VERTICAL 1: BUSINESS CONTINUITY
+// ============================================================
+
+model VaultEntry {
+  id              String      @id @default(uuid())
+  userId          String
+  serviceName     String
+  serviceType     ServiceType
+  encryptedData   String
+  nonce           String
+  lastRotated     DateTime?
+  expiresAt       DateTime?
+  accessibleBy    String[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("vault_entries")
+}
+
+enum ServiceType {
+  CLOUD_PROVIDER
+  PAYMENT_PROCESSOR
+  DOMAIN_REGISTRAR
+  HOSTING
+  DATABASE
+  EMAIL
+  MONITORING
+  SOURCE_CONTROL
+  OTHER
+}
+
+model Heir {
+  id                String          @id @default(uuid())
+  userId            String
+  fullName          String
+  email             String
+  phone             String?
+  relationship      String
+  accessLevel       HeirAccessLevel
+  notificationOrder Int
+  isVerified        Boolean         @default(false)
+  verificationToken String?         @unique
+  instructions      String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("heirs")
+}
+
+enum HeirAccessLevel {
+  FULL
+  OPERATIONAL
+  READONLY
+  NOTIFICATION_ONLY
+}
+
+model DeadmanConfig {
+  id                 String    @id @default(uuid())
+  userId             String    @unique
+  isEnabled          Boolean   @default(false)
+  checkIntervalHours Int       @default(72)
+  lastCheckIn        DateTime  @default(now())
+  gracePeriodHours   Int       @default(24)
+  escalationStage    Int       @default(0)
+  alertEmail         Boolean   @default(true)
+  alertSms           Boolean   @default(false)
+  alertPhone         String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("deadman_configs")
+}
+
+model GeneratedDocument {
+  id           String       @id @default(uuid())
+  userId       String
+  documentType DocumentType
+  title        String
+  content      String
+  jurisdiction String
+  metadata     Json?
+  createdAt    DateTime     @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("generated_documents")
+}
+
+enum DocumentType {
+  DIGITAL_POWER_OF_ATTORNEY
+  BUSINESS_CONTINUITY_PLAN
+  INFRASTRUCTURE_HEIR_AGREEMENT
+  CUSTOMER_NOTIFICATION_TEMPLATE
+  OPERATING_AGREEMENT_ADDENDUM
+  CREDENTIAL_ACCESS_AGREEMENT
+}
+
+// ============================================================
+// VERTICAL 2: VERIFIED WORK LEDGER
+// ============================================================
+
+model WorkEntry {
+  id                 String       @id @default(uuid())
+  userId             String
+  projectName        String
+  description        String
+  deploymentUrl      String?
+  repositoryUrl      String?
+  platform           String?
+  techStack          String[]
+  evidenceHash       String
+  signature          String
+  publicKey          String
+  metrics            Json?
+  verifiedAt         DateTime?
+  verificationMethod String?
+  status             LedgerStatus @default(PENDING)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("work_entries")
+}
+
+enum LedgerStatus {
+  PENDING
+  VERIFIED
+  DISPUTED
+  EXPIRED
+}
+
+// ============================================================
+// VERTICAL 3: COMPLIANCE LAYER
+// ============================================================
+
+model ComplianceScan {
+  id             String                @id @default(uuid())
+  userId         String
+  projectName    String
+  repositoryUrl  String
+  frameworks     ComplianceFramework[]
+  scanResults    Json
+  overallScore   Int
+  criticalIssues Int                   @default(0)
+  warnings       Int                   @default(0)
+  passedChecks   Int                   @default(0)
+  auditTrail     Json?
+  status         ScanStatus            @default(IN_PROGRESS)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("compliance_scans")
+}
+
+enum ComplianceFramework {
+  HIPAA
+  GDPR
+  SOC2
+  FDA
+  PCI_DSS
+  CCPA
+  ISO_27001
+}
+
+enum ScanStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// ============================================================
+// VERTICAL 4: INSURANCE PLATFORM
+// ============================================================
+
+model InsurancePolicy {
+  id             String       @id @default(uuid())
+  userId         String
+  policyNumber   String       @unique
+  policyType     PolicyType
+  applicationUrl String?
+  riskScore      Int
+  riskFactors    Json
+  premiumMonthly Decimal?
+  premiumAnnual  Decimal?
+  coverageLimit  Decimal?
+  deductible     Decimal?
+  status         PolicyStatus @default(QUOTE)
+  effectiveDate  DateTime?
+  expirationDate DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("insurance_policies")
+}
+
+enum PolicyType {
+  AI_SOFTWARE_EO
+  CYBER_LIABILITY
+  GENERAL_LIABILITY
+  BUNDLED
+}
+
+enum PolicyStatus {
+  QUOTE
+  APPLIED
+  UNDERWRITING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+// ============================================================
+// VERTICAL 5: DEVELOPER COLLECTIVE
+// ============================================================
+
+model Collective {
+  id          String             @id @default(uuid())
+  name        String
+  description String?
+  entityType  EntityType?
+  entityState String?
+  status      CollectiveStatus   @default(FORMING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  members     CollectiveMember[]
+  projects    CollectiveProject[]
+
+  @@map("collectives")
+}
+
+enum EntityType {
+  LLC
+  SPV
+  PARTNERSHIP
+  CORPORATION
+}
+
+enum CollectiveStatus {
+  FORMING
+  ACTIVE
+  PAUSED
+  DISSOLVED
+}
+
+model CollectiveMember {
+  id           String       @id @default(uuid())
+  userId       String
+  collectiveId String
+  role         MemberRole   @default(MEMBER)
+  revenueShare Decimal?
+  skills       String[]
+  joinedAt     DateTime     @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collective   Collective   @relation(fields: [collectiveId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, collectiveId])
+  @@map("collective_members")
+}
+
+enum MemberRole {
+  ADMIN
+  LEAD
+  MEMBER
+}
+
+model CollectiveProject {
+  id                String        @id @default(uuid())
+  collectiveId      String
+  name              String
+  clientName        String?
+  contractValue     Decimal?
+  status            ProjectStatus @default(PROPOSED)
+  startDate         DateTime?
+  endDate           DateTime?
+  revenueWaterfall  Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  collective        Collective    @relation(fields: [collectiveId], references: [id], onDelete: Cascade)
+
+  @@map("collective_projects")
+}
+
+enum ProjectStatus {
+  PROPOSED
+  BIDDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}

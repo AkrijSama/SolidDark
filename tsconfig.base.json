@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "@soliddark/spec": ["packages/spec/dist/index.d.ts"],
+      "@soliddark/core": ["packages/core/dist/index.d.ts"],
+      "@soliddark/sdk": ["packages/sdk/dist/index.d.ts"],
+      "@soliddark/registry": ["packages/registry/dist/index.d.ts"]
+    },
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  }
+}

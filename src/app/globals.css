@@ -1,26 +1,100 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a2e;
+  --bg-input: #1e1e30;
+  --accent-red: #e94560;
+  --accent-blue: #0f3460;
+  --accent-cyan: #16c2d5;
+  --accent-amber: #f59e0b;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a0a0b8;
+  --text-tertiary: #6b6b80;
+  --border-default: #2a2a3e;
+  --border-hover: #3a3a50;
+  --border-focus: #e94560;
+  --radius: 0.75rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
+  border-color: var(--border-default);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(22, 194, 213, 0.08), transparent 30%),
+    linear-gradient(180deg, #11111c 0%, var(--bg-primary) 45%);
+  color: var(--text-primary);
+  font-family: var(--font-body), sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(233, 69, 96, 0.35);
+  color: white;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-fade {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.panel-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+}
+
+.field-base {
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.field-base::placeholder {
+  color: var(--text-tertiary);
+}
+
+.field-base:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+
+.legal-footer {
+  border-top: 1px solid var(--border-default);
+  background: rgba(10, 10, 15, 0.88);
+  backdrop-filter: blur(14px);
 }

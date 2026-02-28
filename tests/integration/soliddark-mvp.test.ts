@@ -1,0 +1,365 @@
+import { mkdtemp, readFile, writeFile, cp, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+import { renderRiskPassportMarkdown, scanProject } from "../../packages/core/src/index.js";
+import { startRegistryServer } from "../../packages/registry/src/index.js";
+import { RegistryClient } from "../../packages/sdk/src/index.js";
+import { riskPassportSchema } from "../../packages/spec/src/index.js";
+import { runCli } from "../../packages/cli/src/index.js";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+async function makeTempDir(prefix: string) {
+  return await mkdtemp(join(tmpdir(), prefix));
+}
+
+async function copyFixture(name: string) {
+  const source = resolve(repoRoot, "fixtures", name);
+  const tempRoot = await makeTempDir(`soliddark-${name}-`);
+  const target = join(tempRoot, name);
+  await cp(source, target, { recursive: true });
+  return target;
+}
+
+function withTempHome(homeDir: string) {
+  process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir;
+}
+
+async function captureLogs<T>(fn: () => Promise<T>) {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg))).join(" "));
+  };
+
+  try {
+    const result = await fn();
+    return { result, lines };
+  } finally {
+    console.log = original;
+  }
+}
+
+function normalizeMarkdown(markdown: string) {
+  return markdown.replace(/Generated: .+/g, "Generated: <timestamp>");
+}
+
+async function listFilesRecursive(root: string, current = root): Promise<string[]> {
+  const entries = await readdir(current, { withFileTypes: true });
+  const output: string[] = [];
+
+  for (const entry of entries) {
+    const absolute = join(current, entry.name);
+    if (entry.isDirectory()) {
+      output.push(...(await listFilesRecursive(root, absolute)));
+      continue;
+    }
+
+    output.push(absolute.slice(root.length + 1));
+  }
+
+  return output.sort();
+}
+
+async function withMockedRegistryFetch<T>(
+  baseUrl: string,
+  handler: (input: string, init?: RequestInit) => Promise<Response>,
+  fn: () => Promise<T>,
+) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (!url.startsWith(baseUrl)) {
+      return originalFetch(input as never, init);
+    }
+
+    return await handler(url, init);
+  };
+
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+describe("SolidDark proprietary defensibility MVP", () => {
+  it("generates a valid risk passport and deterministic markdown sections", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    const { passport } = await scanProject(fixtureDir, { offline: true });
+    const parsed = riskPassportSchema.parse(passport);
+    const markdown = normalizeMarkdown(renderRiskPassportMarkdown(parsed));
+
+    expect(parsed.summary.dependency_count).toBe(2);
+    expect(markdown).toContain("## What we know");
+    expect(markdown).toContain("## What we don’t know");
+    expect(markdown).toContain("## Next actions");
+    expect(markdown).toMatchInlineSnapshot(`
+      "# SolidDark Risk Passport
+
+      Generated: <timestamp>
+      Tool version: 0.1.0
+
+      ## Disclaimers
+
+      - Not legal advice. For information purposes only.
+      - No guarantee of security. This report may be incomplete.
+
+      ## What we know
+
+      - Ecosystems detected: node
+      - Dependencies parsed: 2
+      - Secret findings: 0
+      - Vulnerability findings: UNKNOWN
+      - CI detected: yes
+      - Tests detected: yes
+
+      ## What we don’t know
+
+      - [repo] Command failed: git rev-parse HEAD
+      fatal: not a git repository (or any of the parent directories): .git
+
+      - [vuln-scan] OSV lookup was skipped because offline mode was requested.
+      - [secret-scan] gitleaks is not installed; only built-in detectors were used.
+
+      ## Assumptions made
+
+      - [scanner] Supported ecosystems are limited to Node and Python for this MVP.
+
+      ## Contradictions detected
+
+      - No contradictions detected.
+
+      ## Risk score + drivers + confidence
+
+      - Score: 73/100
+      - Confidence: 66%
+      - Status: UNKNOWN
+      - Unknowns penalty: 3 unresolved data points reduce confidence. (-12)
+      - No critical findings in local checks: Built-in secret scan did not find secrets and known vulnerabilities were not reported. (0)
+
+      ## Next actions
+
+      1. Run the scan online to resolve vulnerability unknowns. The vulnerability section is unknown without a successful OSV lookup.
+
+      ## Dependency inventory
+
+      - node: lodash@4.17.21 (package-lock.json)
+      - node: zod@4.3.6 (package-lock.json)
+
+      "
+    `);
+  });
+
+  it("runs an offline CLI scan, produces artifacts, and records vulnerability unknowns without failing", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    const homeDir = await makeTempDir("soliddark-home-");
+    const outDir = await makeTempDir("soliddark-out-");
+    withTempHome(homeDir);
+
+    const { lines } = await captureLogs(async () => {
+      await runCli(["scan", fixtureDir, "--offline", "--out", outDir], repoRoot);
+    });
+
+    const summary = JSON.parse(lines.at(-1) ?? "{}") as { status?: string };
+    const passport = riskPassportSchema.parse(JSON.parse(await readFile(join(outDir, "risk-passport.json"), "utf8")));
+    const manifest = JSON.parse(await readFile(join(outDir, "scan-manifest.json"), "utf8")) as {
+      steps: Array<{ step: string; status: string }>;
+    };
+
+    expect(summary.status).toBe("ok");
+    expect(passport.vulnerabilities.status).toBe("unknown");
+    expect(manifest.steps.some((step) => step.step === "vuln-scan" && step.status === "unknown")).toBe(true);
+  });
+
+  it("finds planted secret-like material and contradictory lockfiles", async () => {
+    const fixtureDir = await copyFixture("mixed");
+    const { passport } = await scanProject(fixtureDir, { offline: true, includePaths: true });
+
+    expect(passport.secrets.findings.some((item) => item.detector === "github-token")).toBe(true);
+    expect(passport.contradictions.some((item) => item.message.includes("package-lock.json"))).toBe(true);
+  });
+
+  it("signs, publishes, verifies PASS, and fails verification after tampering", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    const homeDir = await makeTempDir("soliddark-home-");
+    const outDir = await makeTempDir("soliddark-out-");
+    const registryDir = await makeTempDir("soliddark-registry-");
+    withTempHome(homeDir);
+
+    const server = await startRegistryServer({
+      host: "127.0.0.1",
+      port: 4011,
+      apiKey: "test-key",
+      dataDir: registryDir,
+      listen: false,
+    });
+
+    try {
+      const baseUrl = "http://127.0.0.1:4011";
+      await withMockedRegistryFetch(
+        baseUrl,
+        async (url, init) => {
+          const pathname = new URL(url).pathname + new URL(url).search;
+          const response = await server.app.inject({
+            method: (init?.method ?? "GET") as "GET" | "POST",
+            url: pathname,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            payload: typeof init?.body === "string" ? init.body : undefined,
+          }) as unknown as { body: string; statusCode: number };
+          return new Response(response.body, { status: response.statusCode });
+        },
+        async () => {
+          await runCli(["keys", "generate"], repoRoot);
+          await runCli(["registry", "login", "--api-key", "test-key", "--url", baseUrl], repoRoot);
+          await runCli(["scan", fixtureDir, "--offline", "--out", outDir], repoRoot);
+
+          const passportPath = join(outDir, "risk-passport.json");
+          const sigPath = join(outDir, "risk-passport.sig");
+          const registryPath = join(outDir, "risk-passport.registry.json");
+
+          await runCli(["publish", passportPath, "--bench-opt-in"], repoRoot);
+
+          const passRun = await captureLogs(async () => {
+            await runCli(["verify", passportPath, "--sig", sigPath, "--registry-envelope", registryPath], repoRoot);
+          });
+          const passPayload = JSON.parse(passRun.lines.at(-1) ?? "{}") as {
+            overall?: string;
+            reasons?: Array<{ message: string }>;
+          };
+
+          expect(passPayload.overall).toBe("PASS");
+          expect(passPayload.reasons?.some((item) => item.message.includes("Local signature verified"))).toBe(true);
+
+          const tampered = JSON.parse(await readFile(passportPath, "utf8")) as { summary: { dependency_count: number } };
+          tampered.summary.dependency_count += 1;
+          await writeFile(passportPath, `${JSON.stringify(tampered, null, 2)}\n`, "utf8");
+
+          const failRun = await captureLogs(async () => {
+            await runCli(["verify", passportPath, "--sig", sigPath, "--registry-envelope", registryPath], repoRoot);
+          });
+          const failPayload = JSON.parse(failRun.lines.at(-1) ?? "{}") as {
+            overall?: string;
+            reasons?: Array<{ message: string }>;
+          };
+
+          expect(failPayload.overall).toBe("FAIL");
+          expect(failPayload.reasons?.some((item) => item.message.includes("failed verification"))).toBe(true);
+        },
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("supports registry revocation and benchmark percentiles", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    const homeDir = await makeTempDir("soliddark-home-");
+    const outDir = await makeTempDir("soliddark-out-");
+    const registryDir = await makeTempDir("soliddark-registry-");
+    withTempHome(homeDir);
+
+    const server = await startRegistryServer({
+      host: "127.0.0.1",
+      port: 4012,
+      apiKey: "bench-key",
+      dataDir: registryDir,
+      listen: false,
+    });
+
+    try {
+      const baseUrl = "http://127.0.0.1:4012";
+      await withMockedRegistryFetch(
+        baseUrl,
+        async (url, init) => {
+          const pathname = new URL(url).pathname + new URL(url).search;
+          const response = await server.app.inject({
+            method: (init?.method ?? "GET") as "GET" | "POST",
+            url: pathname,
+            headers: Object.fromEntries(new Headers(init?.headers).entries()),
+            payload: typeof init?.body === "string" ? init.body : undefined,
+          }) as unknown as { body: string; statusCode: number };
+          return new Response(response.body, { status: response.statusCode });
+        },
+        async () => {
+          const client = new RegistryClient({ baseUrl, apiKey: "bench-key" });
+
+          await runCli(["keys", "generate"], repoRoot);
+          await runCli(["registry", "login", "--api-key", "bench-key", "--url", baseUrl], repoRoot);
+          await runCli(["scan", fixtureDir, "--offline", "--out", outDir], repoRoot);
+
+          const passportPath = join(outDir, "risk-passport.json");
+          await runCli(["publish", passportPath, "--bench-opt-in"], repoRoot);
+
+          const envelope = JSON.parse(await readFile(join(outDir, "risk-passport.registry.json"), "utf8")) as {
+            verification_id: string;
+          };
+
+          const verifyBefore = await client.verify(envelope.verification_id);
+          expect(verifyBefore.status).toBe("valid");
+
+          const revokeResult = await client.revoke(envelope.verification_id);
+          expect(revokeResult.status).toBe("revoked");
+
+          const percentile = await client.getPercentile({
+            ecosystem: "node",
+            metric: "dep_count",
+            value: 2,
+          });
+          expect(percentile.dataset_size).toBeGreaterThan(0);
+          expect(percentile.percentile).toBeGreaterThanOrEqual(0);
+          expect(percentile.percentile).toBeLessThanOrEqual(100);
+        },
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("exports a vendor packet with procurement-ready files", async () => {
+    const fixtureDir = await copyFixture("node-simple");
+    const homeDir = await makeTempDir("soliddark-home-");
+    const outDir = await makeTempDir("soliddark-out-");
+    const exportDir = await makeTempDir("soliddark-export-");
+    withTempHome(homeDir);
+
+    await runCli(["keys", "generate"], repoRoot);
+    await runCli(["scan", fixtureDir, "--offline", "--out", outDir], repoRoot);
+    await runCli(["continuity", fixtureDir, "--out", outDir], repoRoot);
+    await runCli([
+      "export",
+      "vendor-packet",
+      "--passport",
+      join(outDir, "risk-passport.json"),
+      "--continuity",
+      join(outDir, "continuity-pack"),
+      "--out",
+      exportDir,
+    ], repoRoot);
+
+    const files = await listFilesRecursive(exportDir);
+    expect(files).toEqual([
+      "continuity-pack/README.md",
+      "continuity-pack/credential-handoff.md",
+      "continuity-pack/incident-contacts.md",
+      "continuity-pack/inference-hints.json",
+      "continuity-pack/release-checklist.md",
+      "disclaimers.txt",
+      "executive-summary.md",
+      "risk-passport.json",
+      "risk-passport.md",
+      "verification.txt",
+    ]);
+  });
+});

@@ -1,0 +1,79 @@
+name: SolidDark Passport
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  passport:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SOLIDDARK_OUT: .soliddark/ci
+      SOLIDDARK_REGISTRY_URL: ${{ secrets.SOLIDDARK_REGISTRY_URL }}
+      SOLIDDARK_REGISTRY_API_KEY: ${{ secrets.SOLIDDARK_REGISTRY_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Generate signing key
+        run: pnpm --filter @soliddark/cli exec soliddark keys generate
+
+      - name: Scan repository
+        run: pnpm --filter @soliddark/cli exec soliddark scan . --out "$SOLIDDARK_OUT"
+
+      - name: Build continuity pack
+        run: pnpm --filter @soliddark/cli exec soliddark continuity . --out "$SOLIDDARK_OUT"
+
+      - name: Export vendor packet
+        run: |
+          pnpm --filter @soliddark/cli exec soliddark export vendor-packet \
+            --passport "$SOLIDDARK_OUT/risk-passport.json" \
+            --continuity "$SOLIDDARK_OUT/continuity-pack" \
+            --out "$SOLIDDARK_OUT/vendor-packet"
+
+      - name: Registry login
+        if: ${{ env.SOLIDDARK_REGISTRY_API_KEY != '' && env.SOLIDDARK_REGISTRY_URL != '' }}
+        run: |
+          pnpm --filter @soliddark/cli exec soliddark registry login \
+            --api-key "$SOLIDDARK_REGISTRY_API_KEY" \
+            --url "$SOLIDDARK_REGISTRY_URL"
+
+      - name: Publish verification envelope
+        if: ${{ env.SOLIDDARK_REGISTRY_API_KEY != '' && env.SOLIDDARK_REGISTRY_URL != '' }}
+        run: pnpm --filter @soliddark/cli exec soliddark publish "$SOLIDDARK_OUT/risk-passport.json" --bench-opt-in
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: soliddark-passport-${{ github.ref_name }}
+          path: |
+            ${{ env.SOLIDDARK_OUT }}/risk-passport.json
+            ${{ env.SOLIDDARK_OUT }}/risk-passport.md
+            ${{ env.SOLIDDARK_OUT }}/risk-passport.sig
+            ${{ env.SOLIDDARK_OUT }}/scan-manifest.json
+            ${{ env.SOLIDDARK_OUT }}/risk-passport.registry.json
+            ${{ env.SOLIDDARK_OUT }}/risk-passport.registry.sig
+            ${{ env.SOLIDDARK_OUT }}/continuity-pack
+            ${{ env.SOLIDDARK_OUT }}/vendor-packet
+          if-no-files-found: ignore

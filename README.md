@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SolidDark
 
-## Getting Started
+SolidDark is a seed-stage trust layer for software diligence. This repository now ships a monorepo MVP that separates the open `risk-passport.json` spec from the proprietary verification network so the trust wedge can harden without forcing a later refactor.
 
-First, run the development server:
+Every artifact includes these disclaimers:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Not legal advice. For information purposes only.
+- No guarantee of security. This report may be incomplete.
+
+SolidDark does not provide representation and does not create an attorney-client relationship.
+
+## What ships in this MVP
+
+- Open spec package for `risk-passport.json`
+- Local CLI for scan, signing, continuity, verification, and vendor packet export
+- Registry service for countersignatures, revocation, and benchmark percentiles
+- SDK used by the CLI for registry communication
+- GitHub Actions example for release-attached diligence artifacts
+
+## Monorepo layout
+
+```text
+packages/
+  spec/      open schema, JSON schema export, example fixture, separate license
+  core/      canonical JSON, hashing, signing, scanners, enrichment interface
+  cli/       soliddark executable
+  registry/  trust registry service
+  sdk/       registry client
+docs/
+fixtures/
+LICENSES/
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`packages/spec` is kept independently publishable and separately licensed.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Quickstart
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm install
+pnpm build:packages
 
-## Learn More
+pnpm --filter @soliddark/cli exec soliddark keys generate
+pnpm --filter @soliddark/cli exec soliddark scan fixtures/node-simple --offline --out ./.soliddark/demo
+pnpm --filter @soliddark/cli exec soliddark continuity fixtures/node-simple --out ./.soliddark/demo
+pnpm --filter @soliddark/cli exec soliddark export vendor-packet \
+  --passport ./.soliddark/demo/risk-passport.json \
+  --continuity ./.soliddark/demo/continuity-pack \
+  --out ./.soliddark/vendor-packet
+```
 
-To learn more about Next.js, take a look at the following resources:
+To run the local registry:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm --filter @soliddark/registry exec tsx src/index.ts
+pnpm --filter @soliddark/cli exec soliddark registry login --api-key soliddark-dev-key --url http://127.0.0.1:4010
+pnpm --filter @soliddark/cli exec soliddark publish ./.soliddark/demo/risk-passport.json --bench-opt-in
+pnpm --filter @soliddark/cli exec soliddark verify ./.soliddark/demo/risk-passport.json
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## CLI surface
 
-## Deploy on Vercel
+```bash
+soliddark init
+soliddark keys generate
+soliddark keys status
+soliddark scan <path> [--out <dir>] [--offline] [--include-paths]
+soliddark continuity <path> [--out <dir>]
+soliddark registry login --api-key <key> [--url <registry>]
+soliddark registry dev [--host <host>] [--port <port>] [--data-dir <dir>]
+soliddark registry status
+soliddark publish <risk-passport.json> [--project-label <label>] [--bench-opt-in]
+soliddark verify <risk-passport.json> [--sig <file>] [--registry-envelope <file>]
+soliddark export vendor-packet --passport <file> --continuity <dir> [--out <dir|zip>]
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Offline behavior
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Offline scan still produces artifacts and exits `0` if the core artifact is produced.
+- Vulnerability lookup becomes `UNKNOWN` with an explicit reason.
+- Registry verification never reports verified when the registry cannot be reached. It returns `UNKNOWN` with the reason instead.
+- No skipped step fails silently. Unknowns and errors are aggregated into the passport and `scan-manifest.json`.
+
+## Privacy defaults
+
+- Publish uploads counts and hashes only.
+- No file paths, dependency names, or code snippets are sent to the registry.
+- Benchmark ingestion is opt-in.
+- See [docs/PRIVACY.md](/home/akrij/SolidDark/soliddark/docs/PRIVACY.md).
+
+## Documentation
+
+- [docs/DEFENSIBILITY.md](/home/akrij/SolidDark/soliddark/docs/DEFENSIBILITY.md)
+- [docs/PRIVACY.md](/home/akrij/SolidDark/soliddark/docs/PRIVACY.md)
+- [docs/THREAT_MODEL.md](/home/akrij/SolidDark/soliddark/docs/THREAT_MODEL.md)
+
+## Test commands
+
+```bash
+pnpm build:packages
+pnpm test
+```
+
+## Current limits
+
+- Dependency parsing is intentionally limited to Node and Python in v0.
+- Registry trust is local-dev grade unless you provision production keys and deployment.
+- The existing Next.js application in this repo remains present, but the defensibility MVP is implemented in the workspace packages listed above.

@@ -1,0 +1,27 @@
+{
+  "name": "@soliddark/spec",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./examples/*": "./examples/*"
+  },
+  "files": [
+    "dist",
+    "examples",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

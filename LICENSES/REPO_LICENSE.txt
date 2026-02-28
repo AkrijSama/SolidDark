@@ -1,0 +1,9 @@
+SolidDark Repository License
+
+Except for files explicitly licensed otherwise, including the open specification
+package under packages/spec, this repository is proprietary and all rights are
+reserved.
+
+You may evaluate and modify this repository only with explicit authorization
+from the repository owner. No patent, trademark, or redistribution rights are
+granted by default.
