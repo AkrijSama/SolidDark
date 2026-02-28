@@ -3,9 +3,9 @@ import crypto from "node:crypto";
 import { desc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
-import { createDatabaseConnection, database, type DatabaseServices } from "@main/db/connection";
-import { requests } from "@main/db/schema";
-import type { DecisionAction, DecisionReceipt } from "@shared/types";
+import { createDatabaseConnection, database, type DatabaseServices } from "../db/connection";
+import { requests } from "../db/schema";
+import type { DecisionAction, DecisionReceipt } from "../../shared/types";
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {

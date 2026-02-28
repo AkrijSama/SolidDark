@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 
-import { createPolicyEngine, policyEngine, type PolicyEngine } from "@main/engine/policy-engine";
-import type { RashomonPolicy, SecretMatch } from "@shared/types";
+import { createPolicyEngine, policyEngine, type PolicyEngine } from "./policy-engine";
+import type { RashomonPolicy, SecretMatch } from "../../shared/types";
 
 function compilePattern(pattern: string): RegExp {
   let source = pattern;
@@ -69,13 +69,14 @@ function maybeDecodeBase64Segment(value: string): string | null {
 }
 
 function collectCandidates(content: string): Array<{ text: string; encoding: SecretMatch["encoding"] }> {
+  const scanSource = content.length > 250_000 ? content.slice(0, 250_000) : content;
   const candidates: Array<{ text: string; encoding: SecretMatch["encoding"] }> = [
-    { text: content, encoding: "plain" },
+    { text: scanSource, encoding: "plain" },
   ];
 
   try {
-    const decoded = decodeURIComponent(content.replace(/\+/g, "%20"));
-    if (decoded !== content) {
+    const decoded = decodeURIComponent(scanSource.replace(/\+/g, "%20"));
+    if (decoded !== scanSource) {
       candidates.push({ text: decoded, encoding: "urlencoded" });
     }
   } catch {
@@ -83,22 +84,32 @@ function collectCandidates(content: string): Array<{ text: string; encoding: Sec
   }
 
   const base64Candidates = new Set<string>();
-  const wholeDecoded = maybeDecodeBase64Segment(content.trim());
+  const wholeDecoded = maybeDecodeBase64Segment(scanSource.trim());
   if (wholeDecoded) {
     base64Candidates.add(wholeDecoded);
   }
 
-  for (const match of content.matchAll(/[A-Za-z0-9+/=]{20,}/g)) {
+  let inspectedSegments = 0;
+  for (const match of scanSource.matchAll(/[A-Za-z0-9+/=]{20,}/g)) {
     const decoded = maybeDecodeBase64Segment(match[0]);
     if (decoded) {
       base64Candidates.add(decoded);
     }
+    inspectedSegments += 1;
+    if (inspectedSegments >= 200) {
+      break;
+    }
   }
 
-  for (const match of content.matchAll(/[=:]([A-Za-z0-9+/=]{20,})/g)) {
+  inspectedSegments = 0;
+  for (const match of scanSource.matchAll(/[=:]([A-Za-z0-9+/=]{20,})/g)) {
     const decoded = maybeDecodeBase64Segment(match[1]);
     if (decoded) {
       base64Candidates.add(decoded);
+    }
+    inspectedSegments += 1;
+    if (inspectedSegments >= 200) {
+      break;
     }
   }
 

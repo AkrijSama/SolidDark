@@ -5,7 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import * as schema from "@main/db/schema";
+import * as schema from "./schema";
 
 export interface DatabaseServices {
   dataDir: string;

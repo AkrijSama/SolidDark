@@ -1,9 +1,9 @@
 import { desc, eq } from "drizzle-orm";
 
-import { createDatabaseConnection, database, type DatabaseServices } from "@main/db/connection";
-import { domains } from "@main/db/schema";
-import { createPolicyEngine, policyEngine, type PolicyEngine } from "@main/engine/policy-engine";
-import type { DomainCheckResult, DomainRecord, DomainStatus } from "@shared/types";
+import { createDatabaseConnection, database, type DatabaseServices } from "../db/connection";
+import { domains } from "../db/schema";
+import { createPolicyEngine, policyEngine, type PolicyEngine } from "./policy-engine";
+import type { DomainCheckResult, DomainRecord, DomainStatus } from "../../shared/types";
 
 function matchesGlob(pattern: string, value: string): boolean {
   const escaped = pattern

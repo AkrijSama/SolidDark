@@ -38,6 +38,19 @@ export interface AgentRecord {
   threatScore: number;
 }
 
+export interface DetectedAgent {
+  id: string;
+  name: string;
+  processName: string;
+  pid: number;
+  declaredPurpose: string | null;
+  status: AgentStatus;
+  matchedProfile: string | null;
+  allowedDomainsExtra: string[];
+  maxBodyBytes: number;
+  detectedAt: number;
+}
+
 export interface SecretMatch {
   type: string;
   detector: "pattern" | "entropy";
@@ -85,6 +98,7 @@ export interface RequestManifest {
     bodyHash: string;
     contentType: string;
     dataClassification: DataClassification;
+    bodyPreview?: string;
   };
   where: {
     domain: string;
@@ -318,4 +332,26 @@ export interface IpcResponse<T> {
   ok: boolean;
   data?: T;
   error?: string;
+}
+
+export interface InterceptionInput {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body: string;
+  remoteAddress?: string;
+  protocol: "http" | "https";
+  connectHost?: string;
+  connectPort?: number;
+}
+
+export interface InterceptionResult {
+  requestId: string;
+  manifest: RequestManifest;
+  agent: AgentRecord;
+  action: DecisionAction;
+  statusCode: number;
+  responseHeaders: Record<string, string>;
+  responseBody?: string;
+  targetUrl?: string;
 }

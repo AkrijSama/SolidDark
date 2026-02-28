@@ -1,5 +1,5 @@
-import { createPolicyEngine, policyEngine, type PolicyEngine } from "@main/engine/policy-engine";
-import type { RateLimitResult } from "@shared/types";
+import { createPolicyEngine, policyEngine, type PolicyEngine } from "./policy-engine";
+import type { RateLimitResult } from "../../shared/types";
 
 interface CounterState {
   minute: number[];

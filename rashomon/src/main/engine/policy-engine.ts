@@ -10,7 +10,7 @@ import type {
   RashomonPolicy,
   RequestManifest,
   ValidationResult,
-} from "@shared/types";
+} from "../../shared/types";
 
 function withDefaultPolicy(policy: Partial<RashomonPolicy>): RashomonPolicy {
   const rawProfiles = ((policy as {
@@ -304,24 +304,6 @@ export function createPolicyEngine(options: { policiesDir?: string } = {}): Poli
       }
     }
 
-    if (manifest.where.isFirstContact && mergedPolicy.global.new_domain_action !== "allow") {
-      violations.push({
-        ruleId: "domain:first-contact",
-        category: "domain",
-        message: `Destination ${domain} has not been seen before.`,
-        severity: mergedPolicy.global.new_domain_action === "block" ? "critical" : "high",
-      });
-
-      return {
-        action: mergedPolicy.global.new_domain_action,
-        reason: `First contact with ${domain} requires review.`,
-        policyRuleId: "domain:first-contact",
-        source: "domain",
-        violations,
-        anomalies,
-      };
-    }
-
     if (manifest.what.bodySize > mergedPolicy.global.max_request_body_bytes) {
       violations.push({
         ruleId: "payload:max-body",
@@ -376,6 +358,28 @@ export function createPolicyEngine(options: { policiesDir?: string } = {}): Poli
       };
     }
 
+    if (manifest.why.secretsDetected.length > 0 && mergedPolicy.secrets.enabled) {
+      const action = mergedPolicy.secrets.action === "block" ? "block" : "require_approval";
+      violations.push({
+        ruleId: "secret:detected",
+        category: "secret",
+        message: `Detected ${manifest.why.secretsDetected.length} potential secrets in outbound content.`,
+        severity: mergedPolicy.secrets.action === "block" ? "critical" : "high",
+      });
+
+      return {
+        action,
+        reason:
+          mergedPolicy.secrets.action === "block"
+            ? "Outbound content contains secrets."
+            : "Outbound content contains secrets and requires review.",
+        policyRuleId: "secret:detected",
+        source: "policy",
+        violations,
+        anomalies,
+      };
+    }
+
     if (!matchedProfile && mergedPolicy.agents.unknown_agent.action !== "allow" && manifest.where.isFirstContact) {
       violations.push({
         ruleId: "agent:unknown:first-request",
@@ -394,23 +398,19 @@ export function createPolicyEngine(options: { policiesDir?: string } = {}): Poli
       };
     }
 
-    if (manifest.why.secretsDetected.length > 0 && mergedPolicy.secrets.enabled) {
-      const action = mergedPolicy.secrets.action === "block" ? "block" : "require_approval";
+    if (manifest.where.isFirstContact && mergedPolicy.global.new_domain_action !== "allow") {
       violations.push({
-        ruleId: "secret:detected",
-        category: "secret",
-        message: `Detected ${manifest.why.secretsDetected.length} potential secrets in outbound content.`,
-        severity: mergedPolicy.secrets.action === "block" ? "critical" : "high",
+        ruleId: "domain:first-contact",
+        category: "domain",
+        message: `Destination ${domain} has not been seen before.`,
+        severity: mergedPolicy.global.new_domain_action === "block" ? "critical" : "high",
       });
 
       return {
-        action,
-        reason:
-          mergedPolicy.secrets.action === "block"
-            ? "Outbound content contains secrets."
-            : "Outbound content contains secrets and requires review.",
-        policyRuleId: "secret:detected",
-        source: "policy",
+        action: mergedPolicy.global.new_domain_action,
+        reason: `First contact with ${domain} requires review.`,
+        policyRuleId: "domain:first-contact",
+        source: "domain",
         violations,
         anomalies,
       };

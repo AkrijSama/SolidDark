@@ -4,7 +4,7 @@
   "private": true,
   "description": "The security gate that protects you from your own AI agents.",
   "main": "dist/src/main/index.js",
-  "type": "module",
+  "type": "commonjs",
   "packageManager": "pnpm@10.17.1",
   "scripts": {
     "build": "pnpm run build:main && pnpm run build:renderer",
@@ -16,7 +16,7 @@
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest run --root .",
     "test:watch": "vitest --root .",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test tests/e2e"
   },
   "dependencies": {
     "better-sqlite3": "^12.4.1",

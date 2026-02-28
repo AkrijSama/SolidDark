@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   root: resolve(__dirname, "src/renderer"),
@@ -26,6 +26,6 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/unit/**/*.test.ts"],
   },
-});
+} as never);

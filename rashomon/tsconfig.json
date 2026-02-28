@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "lib": ["ES2022", "DOM"],
     "allowJs": false,
     "strict": true,
@@ -13,7 +13,7 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "jsx": "react-jsx",
-    "types": ["node", "vitest/globals"],
+    "types": ["node"],
     "rootDir": ".",
     "outDir": "dist",
     "baseUrl": ".",
@@ -29,10 +29,7 @@
     "src/shared/**/*.ts",
     "src/sdk/**/*.ts",
     "scripts/**/*.ts",
-    "tests/**/*.ts",
-    "vite.config.ts",
-    "tailwind.config.ts",
-    "drizzle.config.ts"
+    "tests/**/*.ts"
   ],
   "exclude": [
     "dist",
