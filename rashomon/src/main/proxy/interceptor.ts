@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { URL } from "node:url";
 
 import { eq } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
 
 import { createAuditLogger, type AuditLogger } from "../audit/logger";
 import { createReceiptService, type ReceiptService } from "../audit/receipt";
@@ -13,6 +12,7 @@ import { createIntentAnalyzer, intentAnalyzer, type IntentAnalyzer } from "../en
 import { createPolicyEngine, policyEngine, type PolicyEngine } from "../engine/policy-engine";
 import { createRateLimiter, rateLimiter, type RateLimiter } from "../engine/rate-limiter";
 import { createSecretScanner, secretScanner, type SecretScanner } from "../engine/secret-scanner";
+import { telemetry } from "../telemetry/reporter";
 import { createAgentDetector, agentDetector, type AgentDetector } from "./agent-detector";
 import type {
   AgentRecord,
@@ -75,6 +75,14 @@ function defaultBlockStatus(action: InterceptionResult["action"]): number {
   }
 }
 
+function processDerivedAgentId(pid: number, processName: string, processPath: string): string {
+  return `proc-${crypto
+    .createHash("sha256")
+    .update(`${pid}:${processName}:${processPath}`)
+    .digest("hex")
+    .slice(0, 16)}`;
+}
+
 export function createRequestInterceptor(
   services: DatabaseServices = database,
   engine: PolicyEngine = policyEngine,
@@ -90,17 +98,29 @@ export function createRequestInterceptor(
   const listeners = new Set<TrafficListener>();
 
   async function resolveAgent(input: InterceptionInput): Promise<AgentRecord> {
-    const headerAgentId = input.headers["x-rashomon-agent-id"] ?? uuidv4();
-    const headerAgentName = input.headers["x-rashomon-agent-name"] ?? "unknown-agent";
-    const headerProcessName = input.headers["x-rashomon-process-name"] ?? headerAgentName;
-    const headerPid = Number(input.headers["x-rashomon-agent-pid"] ?? 0);
-    const detectedAgent = Number.isFinite(headerPid) && headerPid > 0 ? await detector.getAgentForPid(headerPid) : null;
+    const connectionProcess =
+      input.sourcePort && Number.isFinite(input.sourcePort)
+        ? await detector.getProcessForConnection(input.sourcePort)
+        : null;
+    const detectedAgent =
+      connectionProcess && Number.isFinite(connectionProcess.pid)
+        ? await detector.getAgentForPid(connectionProcess.pid)
+        : null;
+
+    const pid = connectionProcess?.pid ?? detectedAgent?.pid ?? null;
+    const processName = connectionProcess?.name ?? detectedAgent?.processName ?? "unknown-process";
+    const processPath = connectionProcess?.path ?? detectedAgent?.processPath ?? processName;
+    const agentName = detectedAgent?.name ?? processName;
+    const agentId =
+      pid !== null && pid > 0
+        ? processDerivedAgentId(pid, processName, processPath)
+        : `unknown-${crypto.randomUUID()}`;
 
     const agent: AgentRecord = {
-      id: detectedAgent?.id ?? headerAgentId,
-      name: detectedAgent?.name ?? headerAgentName,
-      processName: detectedAgent?.processName ?? headerProcessName,
-      pid: detectedAgent?.pid ?? (Number.isFinite(headerPid) ? headerPid : null),
+      id: agentId,
+      name: agentName,
+      processName,
+      pid,
       declaredPurpose: detectedAgent?.declaredPurpose ?? null,
       firstSeen: new Date(),
       lastSeen: new Date(),
@@ -121,6 +141,9 @@ export function createRequestInterceptor(
 
       return {
         ...existing,
+        name: agent.name,
+        processName: agent.processName,
+        pid: agent.pid,
         lastSeen: new Date(),
       };
     }
@@ -137,7 +160,7 @@ export function createRequestInterceptor(
     reason: string,
     policyRuleId?: string,
   ): Promise<InterceptionResult> {
-    const requestId = uuidv4();
+    const requestId = crypto.randomUUID();
     const receipt = await receipts.generateDecisionReceipt({
       requestId,
       requestHash: manifest.what.bodyHash,
@@ -218,6 +241,29 @@ export function createRequestInterceptor(
     for (const listener of listeners) {
       listener(trafficEvent);
     }
+
+    telemetry.report({
+      eventType:
+        manifest.why.secretsDetected.length > 0
+          ? "SECRET_DETECTED"
+          : manifest.decision.action === "block" && manifest.where.isFirstContact
+            ? "NEW_DOMAIN_BLOCKED"
+            : manifest.decision.action === "block"
+              ? "POLICY_VIOLATION"
+              : manifest.decision.action === "throttle"
+                ? "RATE_LIMIT_HIT"
+                : manifest.why.anomalies.some((anomaly) => anomaly.code.toLowerCase().includes("volume"))
+                  ? "VOLUME_ANOMALY"
+                  : "POLICY_VIOLATION",
+      domain: manifest.where.domain,
+      agentName: manifest.who.processName || "unknown",
+      secretType: manifest.why.secretsDetected.length > 0 ? manifest.why.secretsDetected[0]?.type : undefined,
+      decision: manifest.decision.action,
+      policyRuleId: manifest.decision.policyRuleId || policyRuleId,
+      threatScore: Math.round(manifest.risk.threatScore),
+      requestMethod: manifest.what.method,
+      bodySize: manifest.what.bodySize,
+    });
 
     return {
       requestId,

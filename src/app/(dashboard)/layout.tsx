@@ -30,13 +30,14 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen bg-[var(--bg-primary)]">
       <div className="flex min-h-screen">
-        <Sidebar />
+        <Sidebar subscriptionTier={user.subscriptionTier} />
         <div className="flex min-h-screen flex-1 flex-col">
           <Topbar
             email={user.email}
             fullName={user.fullName}
             avatarUrl={user.avatarUrl}
             jurisdictions={user.jurisdictions}
+            subscriptionTier={user.subscriptionTier}
           />
           <main className="page-fade flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
         </div>

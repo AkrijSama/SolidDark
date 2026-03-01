@@ -41,6 +41,21 @@ export function GeneralSettings({ settings, onUpdate }: GeneralSettingsProps) {
             onCheckedChange={(checked) => void onUpdate({ tlsInterceptionEnabled: checked })}
           />
         </div>
+        <div className="rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-slate-300">Share anonymized threat data with SolidDark network</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Shared: event types, domain names, agent names, threat scores, decisions. Never shared: file contents,
+                credential values, request bodies, personal info.
+              </p>
+            </div>
+            <Switch
+              checked={settings.telemetryEnabled}
+              onCheckedChange={(checked) => void onUpdate({ telemetryEnabled: checked })}
+            />
+          </div>
+        </div>
         <Button variant="secondary" onClick={() => void onUpdate(settings)}>
           Persist Settings
         </Button>

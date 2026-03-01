@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CreditCard, LogOut, Settings } from "lucide-react";
 import { toast } from "sonner";
+import type { SubscriptionTier } from "@prisma/client";
 
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +17,10 @@ type TopbarProps = {
   fullName: string | null;
   avatarUrl: string | null;
   jurisdictions: string[];
+  subscriptionTier: SubscriptionTier;
 };
 
-export function Topbar({ email, fullName, avatarUrl, jurisdictions }: TopbarProps) {
+export function Topbar({ email, fullName, avatarUrl, jurisdictions, subscriptionTier }: TopbarProps) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -42,7 +44,7 @@ export function Topbar({ email, fullName, avatarUrl, jurisdictions }: TopbarProp
     <header className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-[rgba(10,10,15,0.88)] px-4 py-3 backdrop-blur sm:px-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <MobileNav />
+          <MobileNav subscriptionTier={subscriptionTier} />
           <div>
             <p className="font-heading text-lg font-semibold">SolidDark</p>
             <div className="mt-1 flex flex-wrap gap-2">

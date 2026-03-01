@@ -82,6 +82,11 @@ const bootstrapSql = [
     receipt_hash TEXT NOT NULL,
     previous_hash TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
   "CREATE INDEX IF NOT EXISTS idx_requests_timestamp ON requests(timestamp DESC)",
   "CREATE INDEX IF NOT EXISTS idx_requests_agent_id ON requests(agent_id)",
   "CREATE INDEX IF NOT EXISTS idx_requests_domain ON requests(domain)",
@@ -95,6 +100,10 @@ export function resolveDataDir(customDir?: string): string {
 
   if (process.env.RASHOMON_DATA_DIR) {
     return path.resolve(process.env.RASHOMON_DATA_DIR);
+  }
+
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return path.join(os.tmpdir(), "rashomon-vitest");
   }
 
   return path.join(os.homedir(), ".rashomon");

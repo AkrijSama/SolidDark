@@ -17,7 +17,7 @@ export interface DomainManager {
   checkDomain: (domain: string) => Promise<DomainCheckResult>;
   recordDomainContact: (domain: string, status?: DomainStatus) => Promise<DomainRecord>;
   approveDomain: (domain: string) => Promise<DomainRecord>;
-  denyDomain: (domain: string) => Promise<DomainRecord>;
+  denyDomain: (domain: string, notes?: string) => Promise<DomainRecord>;
   getUnknownDomains: () => Promise<DomainRecord[]>;
   getDomainStats: () => Promise<DomainRecord[]>;
 }
@@ -141,7 +141,7 @@ export function createDomainManager(
       return services.db.select().from(domains).where(eq(domains.domain, domain)).get() as DomainRecord;
     },
 
-    async denyDomain(domain) {
+    async denyDomain(domain, notes) {
       const now = new Date();
       const existing = services.db.select().from(domains).where(eq(domains.domain, domain)).get();
 
@@ -150,6 +150,7 @@ export function createDomainManager(
           status: "denied",
           addedBy: "user",
           lastSeen: now,
+          notes: notes ?? existing.notes,
         }).where(eq(domains.domain, domain)).run();
       } else {
         services.db.insert(domains).values({
@@ -159,7 +160,7 @@ export function createDomainManager(
           firstSeen: now,
           lastSeen: now,
           requestCount: 0,
-          notes: "Denied by user",
+          notes: notes ?? "Denied by user",
         }).run();
       }
 

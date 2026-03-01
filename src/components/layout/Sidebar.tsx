@@ -11,9 +11,11 @@ import {
   Home,
   Landmark,
   Settings,
+  Shield,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import type { SubscriptionTier } from "@prisma/client";
 
 import { cn } from "@/lib/utils";
 
@@ -25,10 +27,19 @@ const navItems = [
   { href: "/dashboard/compliance", label: "Compliance", icon: ShieldCheck },
   { href: "/dashboard/insurance", label: "Insurance", icon: Landmark },
   { href: "/dashboard/collective", label: "Collective", icon: BriefcaseBusiness },
+  { href: "/dashboard/intelligence", label: "Threat Intel", icon: Shield, minTier: "PROFESSIONAL" },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ] as const;
 
-export function Sidebar() {
+function canAccessItem(item: (typeof navItems)[number], tier: SubscriptionTier) {
+  if (!("minTier" in item) || !item.minTier) {
+    return true;
+  }
+
+  return tier === "PROFESSIONAL" || tier === "ENTERPRISE";
+}
+
+export function Sidebar({ subscriptionTier }: { subscriptionTier: SubscriptionTier }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -49,7 +60,7 @@ export function Sidebar() {
         </button>
       </div>
       <nav className="mt-6 flex flex-1 flex-col gap-2">
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {navItems.filter((item) => canAccessItem(item, subscriptionTier)).map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link

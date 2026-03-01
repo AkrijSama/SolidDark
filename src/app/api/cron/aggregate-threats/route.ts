@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { computeThreatDomainConfidence, summarizeThreatEvents } from "@/lib/services/threat-intelligence";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -29,71 +30,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "No events", date: dateStr });
     }
 
-    const countByType = (type: string) => events.filter((event) => event.eventType === type).length;
-
-    const domainCounts: Record<string, number> = {};
-    events
-      .filter((event) => event.domain && event.decision === "blocked")
-      .forEach((event) => {
-        domainCounts[event.domain!] = (domainCounts[event.domain!] || 0) + 1;
-      });
-    const topBlockedDomains = Object.entries(domainCounts)
-      .sort(([, left], [, right]) => right - left)
-      .slice(0, 20)
-      .map(([domain, count]) => ({ domain, count }));
-
-    const secretCounts: Record<string, number> = {};
-    events
-      .filter((event) => event.secretType)
-      .forEach((event) => {
-        secretCounts[event.secretType!] = (secretCounts[event.secretType!] || 0) + 1;
-      });
-    const topSecretTypes = Object.entries(secretCounts)
-      .sort(([, left], [, right]) => right - left)
-      .slice(0, 10)
-      .map(([type, count]) => ({ type, count }));
-
-    const agentCounts: Record<string, number> = {};
-    events
-      .filter((event) => event.agentName)
-      .forEach((event) => {
-        agentCounts[event.agentName!] = (agentCounts[event.agentName!] || 0) + 1;
-      });
-    const topAgents = Object.entries(agentCounts)
-      .sort(([, left], [, right]) => right - left)
-      .slice(0, 10)
-      .map(([name, count]) => ({ name, events: count }));
+    const summary = summarizeThreatEvents(events);
 
     await prisma.threatDailyStats.upsert({
       where: { date: dateStr },
       create: {
         date: dateStr,
-        totalEvents: events.length,
-        secretsDetected: countByType("SECRET_DETECTED"),
-        domainsBlocked: countByType("NEW_DOMAIN_BLOCKED"),
-        exfiltrationAttempts: countByType("EXFILTRATION_ATTEMPT"),
-        promptInjections: countByType("PROMPT_INJECTION"),
-        volumeAnomalies: countByType("VOLUME_ANOMALY"),
-        intentMismatches: countByType("INTENT_MISMATCH"),
-        uniqueInstallations: new Set(events.map((event) => event.installationId)).size,
-        uniqueAgents: new Set(events.filter((event) => event.agentName).map((event) => event.agentName)).size,
-        topBlockedDomains,
-        topSecretTypes,
-        topAgents,
+        ...summary,
       },
       update: {
-        totalEvents: events.length,
-        secretsDetected: countByType("SECRET_DETECTED"),
-        domainsBlocked: countByType("NEW_DOMAIN_BLOCKED"),
-        exfiltrationAttempts: countByType("EXFILTRATION_ATTEMPT"),
-        promptInjections: countByType("PROMPT_INJECTION"),
-        volumeAnomalies: countByType("VOLUME_ANOMALY"),
-        intentMismatches: countByType("INTENT_MISMATCH"),
-        uniqueInstallations: new Set(events.map((event) => event.installationId)).size,
-        uniqueAgents: new Set(events.filter((event) => event.agentName).map((event) => event.agentName)).size,
-        topBlockedDomains,
-        topSecretTypes,
-        topAgents,
+        ...summary,
       },
     });
 
@@ -102,7 +48,7 @@ export async function GET(request: NextRequest) {
     });
 
     for (const threatDomain of domains) {
-      const newConfidence = Math.min(1, threatDomain.reportedBy * 0.1 + threatDomain.totalBlocks * 0.001);
+      const newConfidence = computeThreatDomainConfidence(threatDomain.reportedBy, threatDomain.totalBlocks);
 
       if (Math.abs(newConfidence - threatDomain.confidence) > 0.01) {
         await prisma.threatDomain.update({

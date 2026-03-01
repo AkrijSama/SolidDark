@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
+import type { SubscriptionTier } from "@prisma/client";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -15,10 +16,19 @@ const navItems = [
   { href: "/dashboard/compliance", label: "Compliance" },
   { href: "/dashboard/insurance", label: "Insurance" },
   { href: "/dashboard/collective", label: "Collective" },
+  { href: "/dashboard/intelligence", label: "Threat Intel", minTier: "PROFESSIONAL" },
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
-export function MobileNav() {
+function canAccessItem(item: (typeof navItems)[number], tier: SubscriptionTier) {
+  if (!("minTier" in item) || !item.minTier) {
+    return true;
+  }
+
+  return tier === "PROFESSIONAL" || tier === "ENTERPRISE";
+}
+
+export function MobileNav({ subscriptionTier }: { subscriptionTier: SubscriptionTier }) {
   const pathname = usePathname();
 
   return (
@@ -34,7 +44,7 @@ export function MobileNav() {
           <SheetTitle className="font-heading text-left text-xl text-[var(--text-primary)]">SolidDark</SheetTitle>
         </SheetHeader>
         <div className="mt-8 flex flex-col gap-2">
-          {navItems.map((item) => {
+          {navItems.filter((item) => canAccessItem(item, subscriptionTier)).map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link

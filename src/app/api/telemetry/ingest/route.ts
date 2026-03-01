@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma, ThreatEventType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { sanitizeTelemetryEvent, validateTelemetryBatch, type TelemetryEventInput } from "@/lib/services/threat-intelligence";
 
 const INGEST_RATE_LIMIT = 100;
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -22,42 +23,29 @@ const THREAT_EVENT_TYPES: ThreatEventType[] = [
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as { events?: Array<Record<string, unknown>> } | Record<string, unknown>;
-    const events = Array.isArray((body as { events?: unknown[] }).events) ? (body as { events: Record<string, unknown>[] }).events : [body as Record<string, unknown>];
+    const events = (Array.isArray((body as { events?: unknown[] }).events)
+      ? (body as { events: TelemetryEventInput[] }).events
+      : [body as TelemetryEventInput]);
+    const validation = validateTelemetryBatch(events);
 
-    if (events.length === 0) {
-      return NextResponse.json({ error: "No events" }, { status: 400 });
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    if (events.length > 50) {
-      return NextResponse.json({ error: "Max 50 per batch" }, { status: 400 });
-    }
+    const sanitizedEvents = events.map(sanitizeTelemetryEvent);
 
-    for (const event of events) {
-      if (!event.installationId || !event.eventType || !event.decision) {
-        return NextResponse.json({ error: "Each event needs: installationId, eventType, decision" }, { status: 400 });
-      }
-
+    for (const event of sanitizedEvents) {
       if (!THREAT_EVENT_TYPES.includes(String(event.eventType) as ThreatEventType)) {
         return NextResponse.json({ error: "Invalid eventType" }, { status: 400 });
       }
-
-      if (event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)) {
-        const metadata = event.metadata as Record<string, unknown>;
-        delete metadata.requestBody;
-        delete metadata.requestHeaders;
-        delete metadata.credentials;
-        delete metadata.apiKey;
-        delete metadata.password;
-        delete metadata.token;
-      }
     }
 
-    const installationId = String(events[0].installationId);
+    const installationId = String(sanitizedEvents[0].installationId);
     const now = Date.now();
     const entry = rateLimitMap.get(installationId);
 
     if (entry && entry.resetAt > now) {
-      if (entry.count + events.length > INGEST_RATE_LIMIT) {
+      if (entry.count + sanitizedEvents.length > INGEST_RATE_LIMIT) {
         return NextResponse.json(
           {
             error: "Rate limit",
@@ -67,9 +55,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      entry.count += events.length;
+      entry.count += sanitizedEvents.length;
     } else {
-      rateLimitMap.set(installationId, { count: events.length, resetAt: now + 3_600_000 });
+      rateLimitMap.set(installationId, { count: sanitizedEvents.length, resetAt: now + 3_600_000 });
     }
 
     if (rateLimitMap.size > 10_000) {
@@ -81,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     await prisma.threatEvent.createMany({
-      data: events.map((event) => ({
+      data: sanitizedEvents.map((event) => ({
         installationId: String(event.installationId),
         eventType: String(event.eventType) as never,
         domain: event.domain ? String(event.domain) : null,
@@ -100,27 +88,30 @@ export async function POST(request: NextRequest) {
       })),
     });
 
-    const blockedDomains = events.filter((event) => event.domain && event.decision === "blocked").map((event) => String(event.domain));
+    const blockedDomains = sanitizedEvents
+      .filter((event) => event.domain && event.decision === "blocked")
+      .map((event) => String(event.domain));
 
     for (const domain of [...new Set(blockedDomains)]) {
+      const incrementBy = blockedDomains.filter((candidate) => candidate === domain).length;
       await prisma.threatDomain.upsert({
         where: { domain },
         create: {
           domain,
-          totalBlocks: 1,
+          totalBlocks: incrementBy,
           reportedBy: 1,
           category: "unknown",
         },
         update: {
           totalBlocks: {
-            increment: blockedDomains.filter((candidate) => candidate === domain).length,
+            increment: incrementBy,
           },
           lastSeen: new Date(),
         },
       });
     }
 
-    return NextResponse.json({ accepted: events.length });
+    return NextResponse.json({ accepted: sanitizedEvents.length });
   } catch (error) {
     console.error("Telemetry ingestion error:", error);
     return NextResponse.json({ error: "Ingestion failed" }, { status: 500 });

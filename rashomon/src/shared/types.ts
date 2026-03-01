@@ -43,12 +43,21 @@ export interface DetectedAgent {
   name: string;
   processName: string;
   pid: number;
+  processPath?: string;
   declaredPurpose: string | null;
   status: AgentStatus;
   matchedProfile: string | null;
   allowedDomainsExtra: string[];
   maxBodyBytes: number;
   detectedAt: number;
+}
+
+export interface ConnectionProcessInfo {
+  pid: number;
+  name: string;
+  path: string;
+  sourcePort: number;
+  resolvedAt: number;
 }
 
 export interface SecretMatch {
@@ -321,6 +330,7 @@ export interface SettingsState {
   autoStart: boolean;
   notificationsEnabled: boolean;
   tlsInterceptionEnabled: boolean;
+  telemetryEnabled: boolean;
   intentProvider: IntentProvider;
   anthropicApiKey: string;
   ollamaBaseUrl: string;
@@ -340,9 +350,11 @@ export interface InterceptionInput {
   headers: Record<string, string>;
   body: string;
   remoteAddress?: string;
+  sourcePort?: number;
   protocol: "http" | "https";
   connectHost?: string;
   connectPort?: number;
+  sniHost?: string;
 }
 
 export interface InterceptionResult {

@@ -89,3 +89,9 @@ export const auditLog = sqliteTable("audit_log", {
   receiptHash: text("receipt_hash").notNull(),
   previousHash: text("previous_hash"),
 });
+
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});

@@ -30,6 +30,7 @@ const fallbackData: Record<string, unknown> = {
     autoStart: false,
     notificationsEnabled: true,
     tlsInterceptionEnabled: false,
+    telemetryEnabled: true,
     intentProvider: "disabled",
     anthropicApiKey: "",
     ollamaBaseUrl: "http://127.0.0.1:11434",
