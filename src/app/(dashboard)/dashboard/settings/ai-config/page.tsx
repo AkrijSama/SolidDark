@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { redirect } from "next/navigation";
 
+import { ApiKeyManager } from "@/components/settings/ApiKeyManager";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,6 +176,8 @@ export default async function AiConfigPage({
           </Button>
         </form>
       </div>
+
+      <ApiKeyManager />
     </div>
   );
 }

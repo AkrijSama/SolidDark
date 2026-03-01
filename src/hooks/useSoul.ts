@@ -30,6 +30,10 @@ export function useSoul() {
   const [messages, setMessages] = useState<SoulMessageDTO[]>([createInitialMessage()]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
+  const [usingOwnKey, setUsingOwnKey] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
+  const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -74,6 +78,7 @@ export function useSoul() {
 
     setIsLoading(true);
     setError(null);
+    setUpgradeMessage(null);
 
     const userMessage: SoulMessageDTO = {
       id: crypto.randomUUID(),
@@ -93,6 +98,7 @@ export function useSoul() {
       createdAt: new Date().toISOString(),
     };
 
+    const previousMessages = messages;
     setMessages((current) => [...current, userMessage, assistantMessage]);
 
     try {
@@ -108,15 +114,49 @@ export function useSoul() {
         }),
       });
 
-      if (!response.ok || !response.body) {
+      if (!response.ok) {
+        if (response.status === 429) {
+          const payload = (await response.json().catch(() => null)) as
+            | {
+                error?: string;
+                rateLimit?: { upgrade?: string };
+              }
+            | null;
+
+          setLimitReached(true);
+          setRateLimitRemaining(0);
+          setUsingOwnKey(false);
+          setUpgradeMessage(payload?.rateLimit?.upgrade ?? "Add your own API key in Settings → AI Configuration for unlimited access");
+          setMessages(previousMessages);
+          throw new Error(payload?.error ?? "Daily message limit reached.");
+        }
+
         const responseText = await response.text();
+        setMessages(previousMessages);
         throw new Error(responseText || "Soul chat request failed.");
       }
 
+      if (!response.body) {
+        setMessages(previousMessages);
+        throw new Error("Soul chat request failed.");
+      }
+
       const conversationId = response.headers.get("X-Conversation-Id");
+      const remainingHeader = response.headers.get("X-RateLimit-Remaining");
+      const usingOwnKeyHeader = response.headers.get("X-Using-Own-Key");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullResponse = "";
+
+      setUsingOwnKey(usingOwnKeyHeader === "true");
+      setLimitReached(false);
+
+      if (remainingHeader) {
+        const parsedRemaining = Number(remainingHeader);
+        if (Number.isFinite(parsedRemaining)) {
+          setRateLimitRemaining(parsedRemaining);
+        }
+      }
 
       while (true) {
         const { value, done } = await reader.read();
@@ -163,10 +203,14 @@ export function useSoul() {
     conversations,
     error,
     isLoading,
+    limitReached,
     messages,
+    rateLimitRemaining,
     sendMessage,
     setActiveConversationId,
     setMessages,
     startNewConversation,
+    upgradeMessage,
+    usingOwnKey,
   };
 }

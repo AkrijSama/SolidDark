@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { MessageSquarePlus } from "lucide-react";
+import { toast } from "sonner";
 
 import { MessageBubble } from "@/components/soul/MessageBubble";
 import { ModelSelector } from "@/components/soul/ModelSelector";
@@ -13,7 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useSoul } from "@/hooks/useSoul";
 
 export function ChatInterface() {
-  const { conversations, error, isLoading, messages, sendMessage, startNewConversation } = useSoul();
+  const { conversations, error, isLoading, limitReached, messages, rateLimitRemaining, sendMessage, startNewConversation, upgradeMessage, usingOwnKey } =
+    useSoul();
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState("claude-sonnet-4-5-20250929");
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -21,6 +24,14 @@ export function ChatInterface() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (limitReached && upgradeMessage) {
+      toast.error("Daily message limit reached", {
+        description: upgradeMessage,
+      });
+    }
+  }, [limitReached, upgradeMessage]);
 
   async function handleSend() {
     const nextDraft = draft;
@@ -111,17 +122,42 @@ export function ChatInterface() {
             <Textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="Ask the Soul what could break, what the law says, or what document you need next."
+              placeholder={
+                limitReached
+                  ? "Daily limit reached. Upgrade or add your own API key to continue."
+                  : "Ask the Soul what could break, what the law says, or what document you need next."
+              }
               className="field-base min-h-28"
+              disabled={isLoading || limitReached}
             />
+            {usingOwnKey ? (
+              <p className="text-xs text-[var(--accent-cyan)]">Using your API key — unlimited</p>
+            ) : rateLimitRemaining !== null ? (
+              <p className="text-xs text-[var(--text-secondary)]">
+                {rateLimitRemaining} message{rateLimitRemaining === 1 ? "" : "s"} remaining today
+              </p>
+            ) : null}
             {error ? <p className="text-sm text-[var(--accent-red)]">{error}</p> : null}
+            {limitReached ? (
+              <div className="rounded-xl border border-[var(--accent-amber)]/40 bg-[var(--accent-amber)]/10 p-4 text-sm">
+                <p className="font-medium text-[var(--text-primary)]">Daily limit reached.</p>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <Link href="/dashboard/settings/billing" className="text-[var(--accent-red)] underline-offset-4 hover:underline">
+                    Upgrade
+                  </Link>
+                  <Link href="/dashboard/settings/ai-config" className="text-[var(--accent-cyan)] underline-offset-4 hover:underline">
+                    Add your own API key
+                  </Link>
+                </div>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-3">
               <Button type="button" variant="outline" onClick={startNewConversation} className="border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]">
                 New conversation
               </Button>
               <Button
                 type="button"
-                disabled={isLoading}
+                disabled={isLoading || limitReached}
                 onClick={() => void handleSend()}
                 className="bg-[var(--accent-red)] text-white hover:bg-[var(--accent-red)]/90"
               >
