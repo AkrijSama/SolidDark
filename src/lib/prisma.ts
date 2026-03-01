@@ -1,7 +1,7 @@
-import "server-only";
-
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+
+process.loadEnvFile?.(".env.local");
 
 declare global {
   var __soliddarkPrisma__: PrismaClient | undefined;
@@ -32,3 +32,5 @@ export function getPrismaClient() {
 
   return global.__soliddarkPrisma__;
 }
+
+export const prisma = getPrismaClient();

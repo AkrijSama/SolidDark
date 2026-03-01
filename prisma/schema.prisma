@@ -34,6 +34,8 @@ model User {
   insurancePolicies InsurancePolicy[]
   collectiveMembers CollectiveMember[]
   soulConversations SoulConversation[]
+  apiUsage          ApiUsage[]
+  userApiKeys       UserApiKey[]
 
   @@map("users")
 }
@@ -393,4 +395,49 @@ enum ProjectStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+}
+
+// ============================================================
+// API USAGE TRACKING
+// ============================================================
+
+model ApiUsage {
+  id                 String   @id @default(uuid())
+  userId             String
+  date               String
+  messageCount       Int      @default(0)
+  tokensIn           Int      @default(0)
+  tokensOut          Int      @default(0)
+  estimatedCostCents Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("api_usage")
+}
+
+// ============================================================
+// USER-PROVIDED API KEYS (BYOK)
+// ============================================================
+
+model UserApiKey {
+  id            String     @id @default(uuid())
+  userId        String
+  provider      AIProvider
+  encryptedKey  String
+  nonce         String
+  keyPrefix     String
+  isValid       Boolean    @default(true)
+  lastUsed      DateTime?
+  lastValidated DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("user_api_keys")
 }
