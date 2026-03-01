@@ -9,3 +9,4 @@ test-results
 *.sqlite
 *.db
 coverage
+.package-app

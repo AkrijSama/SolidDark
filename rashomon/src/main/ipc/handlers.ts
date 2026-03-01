@@ -1,9 +1,9 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 import { BrowserWindow, ipcMain } from "electron";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
 
 import { type DatabaseServices } from "../db/connection";
 import { agents, auditLog, policies, requests } from "../db/schema";
@@ -139,7 +139,7 @@ export function setupIpcHandlers(context: IpcContext): () => void {
     const filePath = path.join(policyEngine.getPoliciesDir(), `${payload.name.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.yaml`);
     fs.writeFileSync(filePath, payload.yamlContent);
     database.db.insert(policies).values({
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       name: payload.name,
       description: null,
       yamlContent: payload.yamlContent,

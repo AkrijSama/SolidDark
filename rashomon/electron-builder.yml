@@ -5,16 +5,19 @@ directories:
   buildResources: build
 files:
   - dist/**
+  - policies/**
   - package.json
 extraMetadata:
   main: dist/src/main/index.js
 asar: true
+npmRebuild: false
 mac:
   category: public.app-category.developer-tools
   target:
     - dmg
 linux:
   category: Development
+  maintainer: SolidDark <security@soliddark.local>
   target:
     - AppImage
     - deb

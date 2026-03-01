@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 
 import { desc } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
 
 import { createDatabaseConnection, database, type DatabaseServices } from "../db/connection";
 import { requests } from "../db/schema";
@@ -62,7 +61,7 @@ export function createReceiptService(services: DatabaseServices = database): Rec
         .digest("hex");
 
       return {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         timestamp,
         requestId: input.requestId,
         requestHash: input.requestHash,

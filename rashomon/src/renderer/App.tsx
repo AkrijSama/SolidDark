@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { toast } from "sonner";
 
 import { AgentList } from "@renderer/components/agents/AgentList";
 import { AgentProfile } from "@renderer/components/agents/AgentProfile";
@@ -16,6 +18,7 @@ import { AISettings } from "@renderer/components/settings/AISettings";
 import { CertSettings } from "@renderer/components/settings/CertSettings";
 import { GeneralSettings } from "@renderer/components/settings/GeneralSettings";
 import { Card, CardContent } from "@renderer/components/ui/card";
+import { Toaster } from "@renderer/components/ui/toaster";
 import { useAgents } from "@renderer/hooks/useAgents";
 import { useAuditLog } from "@renderer/hooks/useAuditLog";
 import { usePolicies } from "@renderer/hooks/usePolicies";
@@ -50,6 +53,7 @@ export default function App() {
     () => events.find((event) => event.decision !== "allow"),
     [events],
   );
+  const lastToastedRequestId = useRef<string | null>(null);
 
   useEffect(() => {
     void invokeIpc<typeof settings>("settings:get").then((nextSettings) => {
@@ -66,6 +70,17 @@ export default function App() {
       setSelectedRequest(request);
     });
   }, [selectedRequestId]);
+
+  useEffect(() => {
+    if (!latestBlockedEvent || latestBlockedEvent.requestId === lastToastedRequestId.current) {
+      return;
+    }
+
+    lastToastedRequestId.current = latestBlockedEvent.requestId;
+    toast.error(`${latestBlockedEvent.agentName} blocked`, {
+      description: `${latestBlockedEvent.domain} · ${latestBlockedEvent.reason}`,
+    });
+  }, [latestBlockedEvent]);
 
   const content = (() => {
     switch (route) {
@@ -199,6 +214,7 @@ export default function App() {
           </button>
         </div>
       ) : null}
+      <Toaster />
     </Shell>
   );
 }

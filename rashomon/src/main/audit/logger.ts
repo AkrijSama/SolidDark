@@ -1,7 +1,5 @@
 import crypto from "node:crypto";
 
-import { v4 as uuidv4 } from "uuid";
-
 import { auditLog } from "../db/schema";
 import { createDatabaseConnection, database, type DatabaseServices } from "../db/connection";
 import type { AuditEntry, AuditEventType } from "../../shared/types";
@@ -48,7 +46,7 @@ export function createAuditLogger(services: DatabaseServices = database): AuditL
   return {
     async logEvent(eventType, details, context = {}) {
       const timestamp = context.timestamp ?? Date.now();
-      const id = uuidv4();
+      const id = crypto.randomUUID();
 
       const previousEntry = services.sqlite
         .prepare("SELECT receipt_hash AS receiptHash FROM audit_log ORDER BY rowid DESC LIMIT 1")

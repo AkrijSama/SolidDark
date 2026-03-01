@@ -1,8 +1,8 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 import yaml from "js-yaml";
-import { v4 as uuidv4 } from "uuid";
 
 import type {
   PolicyDecision,
@@ -113,8 +113,12 @@ export interface PolicyEngine {
   getPoliciesDir: () => string;
 }
 
+function resolveDefaultPoliciesDir(): string {
+  return path.resolve(__dirname, "../../../../policies");
+}
+
 export function createPolicyEngine(options: { policiesDir?: string } = {}): PolicyEngine {
-  const policiesDir = path.resolve(options.policiesDir ?? path.join(process.cwd(), "policies"));
+  const policiesDir = path.resolve(options.policiesDir ?? resolveDefaultPoliciesDir());
   let loadedPolicies: LoadedPolicy[] = [];
   let mergedPolicy = withDefaultPolicy({});
 
@@ -211,7 +215,9 @@ export function createPolicyEngine(options: { policiesDir?: string } = {}): Poli
   }
 
   async function loadPolicies(): Promise<LoadedPolicy[]> {
-    fs.mkdirSync(policiesDir, { recursive: true });
+    if (!fs.existsSync(policiesDir)) {
+      fs.mkdirSync(policiesDir, { recursive: true });
+    }
 
     const files = fs
       .readdirSync(policiesDir)
@@ -231,7 +237,7 @@ export function createPolicyEngine(options: { policiesDir?: string } = {}): Poli
 
       const parsed = withDefaultPolicy(yaml.load(content) as Partial<RashomonPolicy>);
       nextPolicies.push({
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         filePath,
         priority: parsed.priority ?? 100,
         content,

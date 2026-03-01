@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-page-custom-font */
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
@@ -12,6 +12,17 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: APP_NAME,
   description: "Legal, compliance, insurance, and continuity infrastructure for the AI-powered software economy.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/soliddark-mark.png", type: "image/png", sizes: "256x256" },
+    ],
+    apple: [{ url: "/soliddark-mark.png", sizes: "256x256", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#050608",
 };
 
 export const dynamic = "force-dynamic";

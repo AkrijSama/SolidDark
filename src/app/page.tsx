@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,7 +11,6 @@ import {
   FileLock2,
   Fingerprint,
   HeartHandshake,
-  Landmark,
   LifeBuoy,
   ShieldAlert,
   ShieldCheck,
@@ -135,8 +135,8 @@ export default function Home() {
         <div className="mx-auto max-w-7xl">
           <header className="flex items-center justify-between gap-4 py-4">
             <Link href="/" className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border-hover)] bg-[var(--bg-secondary)] shadow-[0_0_40px_rgba(15,52,96,0.18)]">
-                <Landmark className="h-5 w-5 text-[var(--accent-cyan)]" />
+              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-hover)] bg-[radial-gradient(circle_at_center,rgba(215,178,102,0.14),rgba(8,10,14,0.95))] shadow-[0_0_40px_rgba(215,178,102,0.16)]">
+                <Image src="/soliddark-mark.png" alt="SolidDark mark" width={44} height={44} className="h-11 w-11 object-cover" priority />
               </div>
               <div>
                 <p className="font-heading text-lg font-semibold">SolidDark</p>
@@ -269,12 +269,12 @@ export default function Home() {
             <h2 className="font-heading mt-4 text-3xl font-semibold sm:text-4xl">One platform for the five operational gaps most AI teams leave exposed.</h2>
           </div>
           <Tabs defaultValue="continuity" className="mt-10">
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-2 md:grid-cols-5">
+            <TabsList className="grid h-auto w-full grid-cols-1 gap-2 rounded-[1.65rem] bg-[linear-gradient(180deg,rgba(19,22,27,0.96),rgba(8,10,14,0.98))] p-2 sm:grid-cols-2 md:grid-cols-5">
               {verticals.map((vertical) => (
                 <TabsTrigger
                   key={vertical.value}
                   value={vertical.value}
-                  className="rounded-xl border border-transparent px-3 py-3 text-xs font-medium uppercase tracking-[0.18em] data-[state=active]:border-[var(--accent-red)] data-[state=active]:bg-[rgba(233,69,96,0.14)] data-[state=active]:text-white"
+                  className="h-12 w-full rounded-[1rem] border border-transparent px-4 py-0 text-[0.72rem] font-medium uppercase tracking-[0.28em] text-[var(--text-secondary)] data-[state=active]:border-[var(--accent-red)] data-[state=active]:bg-[linear-gradient(180deg,rgba(215,178,102,0.22),rgba(125,96,48,0.14))] data-[state=active]:text-[var(--text-primary)]"
                 >
                   {vertical.label}
                 </TabsTrigger>

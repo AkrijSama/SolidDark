@@ -1,26 +1,34 @@
-import type { HTMLAttributes } from "react";
+import * as React from "react";
 
-const variants = {
-  safe: "bg-green-500/15 text-green-300 border-green-400/25",
-  warn: "bg-yellow-500/15 text-yellow-300 border-yellow-400/25",
-  danger: "bg-red-500/15 text-red-300 border-red-400/25",
-  info: "bg-cyan-500/15 text-cyan-300 border-cyan-400/25",
-  neutral: "bg-white/5 text-slate-300 border-white/10",
-  agent: "bg-violet-500/15 text-violet-300 border-violet-400/25",
-};
+import { cva, type VariantProps } from "class-variance-authority";
 
-export function Badge({
-  className = "",
-  children,
-  variant = "neutral",
-  ...props
-}: HTMLAttributes<HTMLSpanElement> & { variant?: keyof typeof variants }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${variants[variant]} ${className}`}
-      {...props}
-    >
-      {children}
-    </span>
-  );
+import { cn } from "@renderer/lib/utils";
+
+const badgeVariants = cva(
+  "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+  {
+    variants: {
+      variant: {
+        safe: "border-green-400/25 bg-green-500/15 text-green-300",
+        warn: "border-yellow-400/25 bg-yellow-500/15 text-yellow-300",
+        danger: "border-red-400/25 bg-red-500/15 text-red-300",
+        info: "border-cyan-400/25 bg-cyan-500/15 text-cyan-300",
+        neutral: "border-white/10 bg-white/5 text-slate-300",
+        agent: "border-violet-400/25 bg-violet-500/15 text-violet-300",
+      },
+    },
+    defaultVariants: {
+      variant: "neutral",
+    },
+  },
+);
+
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLSpanElement>,
+    VariantProps<typeof badgeVariants> {}
+
+export function Badge({ className, variant, ...props }: BadgeProps) {
+  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
+
+export { badgeVariants };

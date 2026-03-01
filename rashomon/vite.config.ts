@@ -18,6 +18,29 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, "dist/renderer"),
     emptyOutDir: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+
+          if (id.includes("recharts") || id.includes("victory-vendor") || id.includes("d3-")) {
+            return "charts";
+          }
+
+          if (id.includes("@radix-ui") || id.includes("sonner")) {
+            return "ui-vendor";
+          }
+
+          if (id.includes("lucide-react")) {
+            return "icons";
+          }
+
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     host: "127.0.0.1",

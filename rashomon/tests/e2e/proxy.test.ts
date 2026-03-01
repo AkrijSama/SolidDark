@@ -10,7 +10,7 @@ import { createIntentAnalyzer } from "@main/engine/intent-analyzer";
 import { createPolicyEngine } from "@main/engine/policy-engine";
 import { createRateLimiter } from "@main/engine/rate-limiter";
 import { createSecretScanner } from "@main/engine/secret-scanner";
-import { createAgentDetector } from "@main/proxy/agent-detector";
+import type { AgentDetector } from "@main/proxy/agent-detector";
 import { createRequestInterceptor } from "@main/proxy/interceptor";
 test("proxy interception allows safe requests and throttles repeated traffic", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rashomon-proxy-"));
@@ -66,6 +66,30 @@ agents:
   const database = createDatabaseConnection({ dataDir: path.join(tempDir, "data") });
   const policyEngine = createPolicyEngine({ policiesDir });
   await policyEngine.loadPolicies();
+  const detector: AgentDetector = {
+    detectAgents: async () => [],
+    getAgentForPid: async (pid: number) => ({
+      id: `agent-${pid}`,
+      name: "proxy-e2e",
+      processName: "proxy-e2e",
+      processPath: "/usr/bin/proxy-e2e",
+      pid,
+      declaredPurpose: null,
+      status: "active" as const,
+      matchedProfile: null,
+      allowedDomainsExtra: [],
+      maxBodyBytes: 10_485_760,
+      detectedAt: Date.now(),
+    }),
+    getProcessForConnection: async (sourcePort: number) => ({
+      pid: 7788,
+      name: "proxy-e2e",
+      path: "/usr/bin/proxy-e2e",
+      sourcePort,
+      resolvedAt: Date.now(),
+    }),
+    watchProcesses: () => ({ stop: () => undefined }),
+  };
   const interceptor = createRequestInterceptor(
     database,
     policyEngine,
@@ -73,7 +97,7 @@ agents:
     createRateLimiter(policyEngine),
     createSecretScanner(policyEngine),
     createIntentAnalyzer({ provider: "disabled" }),
-    createAgentDetector(policyEngine),
+    detector,
   );
 
   const first = await interceptor.intercept({
@@ -81,13 +105,10 @@ agents:
     url: "http://127.0.0.1/resource",
     headers: {
       host: "127.0.0.1",
-      "x-rashomon-agent-id": "proxy-e2e",
-      "x-rashomon-agent-name": "proxy-e2e",
-      "x-rashomon-process-name": "proxy-e2e",
-      "x-rashomon-agent-pid": "7788",
     },
     body: "",
     protocol: "http",
+    sourcePort: 49152,
   });
 
   expect(first.action).toBe("allow");
@@ -98,13 +119,10 @@ agents:
     url: "http://127.0.0.1/resource",
     headers: {
       host: "127.0.0.1",
-      "x-rashomon-agent-id": "proxy-e2e",
-      "x-rashomon-agent-name": "proxy-e2e",
-      "x-rashomon-process-name": "proxy-e2e",
-      "x-rashomon-agent-pid": "7788",
     },
     body: "",
     protocol: "http",
+    sourcePort: 49152,
   });
   expect(second.action).toBe("throttle");
 });

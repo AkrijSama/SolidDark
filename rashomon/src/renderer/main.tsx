@@ -10,6 +10,8 @@ if (!container) {
   throw new Error("Rashomon root container was not found.");
 }
 
+document.documentElement.classList.add("dark");
+
 createRoot(container).render(
   <StrictMode>
     <App />
