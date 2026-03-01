@@ -441,3 +441,83 @@ model UserApiKey {
   @@unique([userId, provider])
   @@map("user_api_keys")
 }
+
+// ============================================================
+// THREAT INTELLIGENCE (FROM RASHOMON INSTALLATIONS)
+// ============================================================
+
+model ThreatEvent {
+  id             String          @id @default(uuid())
+  installationId String
+  eventType      ThreatEventType
+  domain         String?
+  agentName      String?
+  secretType     String?
+  decision       String
+  policyRuleId   String?
+  threatScore    Int?
+  requestMethod  String?
+  bodySize       Int?
+  entropyScore   Float?
+  metadata       Json?
+  reportedAt     DateTime        @default(now())
+
+  @@index([eventType])
+  @@index([domain])
+  @@index([agentName])
+  @@index([secretType])
+  @@index([reportedAt])
+  @@map("threat_events")
+}
+
+enum ThreatEventType {
+  SECRET_DETECTED
+  NEW_DOMAIN_BLOCKED
+  NEW_DOMAIN_APPROVED
+  RATE_LIMIT_HIT
+  VOLUME_ANOMALY
+  PROMPT_INJECTION
+  EXFILTRATION_ATTEMPT
+  POLICY_VIOLATION
+  INTENT_MISMATCH
+  SENSITIVE_FILE_READ
+}
+
+model ThreatDailyStats {
+  id                   String   @id @default(uuid())
+  date                 String
+  totalEvents          Int      @default(0)
+  secretsDetected      Int      @default(0)
+  domainsBlocked       Int      @default(0)
+  exfiltrationAttempts Int      @default(0)
+  promptInjections     Int      @default(0)
+  volumeAnomalies      Int      @default(0)
+  intentMismatches     Int      @default(0)
+  uniqueInstallations  Int      @default(0)
+  uniqueAgents         Int      @default(0)
+  topBlockedDomains    Json?
+  topSecretTypes       Json?
+  topAgents            Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([date])
+  @@map("threat_daily_stats")
+}
+
+model ThreatDomain {
+  id          String   @id @default(uuid())
+  domain      String   @unique
+  firstSeen   DateTime @default(now())
+  lastSeen    DateTime @default(now())
+  totalBlocks Int      @default(1)
+  reportedBy  Int      @default(1)
+  category    String?
+  confidence  Float    @default(0.5)
+  isConfirmed Boolean  @default(false)
+  notes       String?
+
+  @@index([confidence])
+  @@index([totalBlocks])
+  @@map("threat_domains")
+}
