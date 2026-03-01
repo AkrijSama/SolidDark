@@ -18,6 +18,22 @@ type ProviderOptions = {
 
 const encoder = new TextEncoder();
 
+function resolveApiKey(provider: AIProvider, apiKey?: string) {
+  if (provider === "LOCAL_LLM") {
+    return "local";
+  }
+
+  if (apiKey) {
+    return apiKey;
+  }
+
+  if (provider === "OPENAI_API") {
+    return getRequiredEnv("OPENAI_API_KEY");
+  }
+
+  return getRequiredEnv("ANTHROPIC_API_KEY");
+}
+
 function streamFromIterator(iterator: AsyncGenerator<string, void, void>) {
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -42,10 +58,10 @@ function streamFromIterator(iterator: AsyncGenerator<string, void, void>) {
   });
 }
 
-async function* streamAnthropic(messages: ProviderMessage[], model: string, options?: ProviderOptions) {
+async function* streamAnthropic(messages: ProviderMessage[], model: string, apiKey: string, options?: ProviderOptions) {
   try {
     const client = new Anthropic({
-      apiKey: getRequiredEnv("ANTHROPIC_API_KEY"),
+      apiKey,
     });
 
     const systemMessages = messages.filter((message) => message.role === "system").map((message) => message.content);
@@ -75,13 +91,13 @@ async function* streamAnthropic(messages: ProviderMessage[], model: string, opti
   }
 }
 
-async function* streamOpenAI(messages: ProviderMessage[], model: string, options?: ProviderOptions) {
+async function* streamOpenAI(messages: ProviderMessage[], model: string, apiKey: string, options?: ProviderOptions) {
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${getRequiredEnv("OPENAI_API_KEY")}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model,
@@ -191,13 +207,22 @@ async function* streamLocalLlm(messages: ProviderMessage[], model: string, optio
   }
 }
 
-export function sendMessage(messages: ProviderMessage[], provider: AIProvider, model: string, options?: ProviderOptions) {
+export function sendMessage(
+  messages: ProviderMessage[],
+  provider: AIProvider,
+  model: string,
+  apiKeyOrOptions?: string | ProviderOptions,
+  maybeOptions?: ProviderOptions,
+) {
+  const apiKey = resolveApiKey(provider, typeof apiKeyOrOptions === "string" ? apiKeyOrOptions : undefined);
+  const options = typeof apiKeyOrOptions === "string" ? maybeOptions : apiKeyOrOptions;
+
   const iterator =
     provider === "OPENAI_API"
-      ? streamOpenAI(messages, model, options)
+      ? streamOpenAI(messages, model, apiKey, options)
       : provider === "LOCAL_LLM"
         ? streamLocalLlm(messages, model, options)
-        : streamAnthropic(messages, model, options);
+        : streamAnthropic(messages, model, apiKey, options);
 
   return streamFromIterator(iterator);
 }
